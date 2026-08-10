@@ -7,7 +7,7 @@ def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
     """Raise ValueError when required columns are missing."""
     missing = [column for column in columns if column not in df.columns]
     if missing:
-        raise ValueError(f"Missing required columns: {missing}")
+        raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
 
 def completion_rate(df: pd.DataFrame) -> float:
