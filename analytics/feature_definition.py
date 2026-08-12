@@ -27,7 +27,7 @@ FEATURE_DEFINITIONS = {
     "quiz_frequency": {
         "description": "Number of quiz attempts completed by a learner",
         "source": "quiz_performance",
-        "calculation": "count(quiz_attempts)",
+        "calculation": "count(score_pct)",
     },
     "learning_streak": {
         "description": "Longest sequence of consecutive active learning days",
