@@ -24,4 +24,24 @@ FEATURE_DEFINITIONS = {
         "source": "learning_sessions",
         "calculation": "current_date - max(start_time)",
     },
+    "quiz_frequency": {
+        "description": "Number of quiz attempts completed by a learner",
+        "source": "quiz_performance",
+        "calculation": "count(quiz_attempts)",
+    },
+    "learning_streak": {
+        "description": "Longest sequence of consecutive active learning days",
+        "source": "learning_sessions",
+        "calculation": "longest_consecutive_active_days",
+    },
+    "weekly_sessions": {
+        "description": "Average number of learning sessions per week",
+        "source": "learning_sessions",
+        "calculation": "mean(sessions_per_week)",
+    },
+    "completion_pct": {
+        "description": "Current percentage of the course completed by the learner",
+        "source": "course_completion",
+        "calculation": "completion_pct",
+    },
 }
