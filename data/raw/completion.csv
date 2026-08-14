@@ -1,1 +1,4 @@
-student_id,course_id,enrollment_date,completion_pct,status
+student_id,course_id,completion_pct,status
+S1,C1,85,completed
+S2,C1,60,in_progress
+S3,C2,100,completed

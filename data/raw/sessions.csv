@@ -1,1 +1,5 @@
-session_id,student_id,course_id,start_time,end_time,duration_minutes
+student_id,course_id,duration_minutes
+S1,C1,30
+S1,C1,45
+S2,C1,20
+S3,C2,60

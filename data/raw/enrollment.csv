@@ -1,1 +1,4 @@
 student_id,course_id,enrollment_date,cohort
+S1,C1,2024-01-01,A
+S2,C1,2024-01-02,A
+S3,C2,2024-01-03,B
