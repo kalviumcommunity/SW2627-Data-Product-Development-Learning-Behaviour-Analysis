@@ -9,7 +9,7 @@ if str(app_dir) not in sys.path:
 
 from components.sidebar import render_sidebar
 from components.navbar import render_navbar
-from components.overview import render_overview
+from views.overview import render_overview
 
 st.set_page_config(
     page_title="LearnLens AI - Insight Engine",
