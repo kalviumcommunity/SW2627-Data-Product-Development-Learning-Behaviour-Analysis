@@ -1,11 +1,4 @@
 import streamlit as st
-import sys
-from pathlib import Path
-
-# Add project root and app dir to path for imports
-app_dir = Path(__file__).resolve().parent
-if str(app_dir) not in sys.path:
-    sys.path.append(str(app_dir))
 
 from components.sidebar import render_sidebar
 from components.navbar import render_navbar
