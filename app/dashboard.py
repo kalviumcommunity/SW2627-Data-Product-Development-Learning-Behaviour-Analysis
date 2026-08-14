@@ -15,7 +15,7 @@ st.set_page_config(
 selected_page = render_sidebar()
 
 # 2. Render Top Navbar
-search_query = render_navbar()
+_ = render_navbar()
 
 # 3. Route content based on selected sidebar item
 if selected_page == "Overview":
