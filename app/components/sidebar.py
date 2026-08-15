@@ -36,7 +36,7 @@ def render_sidebar():
             padding: 0 0.5rem 1.5rem 0.5rem !important;
         }
         .sidebar-brand-title {
-            font-size: 1.05rem !important;
+            font-size: 0.90rem !important;
             font-weight: 800 !important;
             background: linear-gradient(135deg, #d97706 0%, #f59e0b 60%, #fbbf24 100%) !important;
             -webkit-background-clip: text !important;
