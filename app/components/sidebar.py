@@ -148,7 +148,6 @@ def render_sidebar():
                 use_container_width=True,
             ):
                 st.session_state["current_page"] = item["name"]
-                st.rerun()
 
         # Vertical Spacer
         st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
