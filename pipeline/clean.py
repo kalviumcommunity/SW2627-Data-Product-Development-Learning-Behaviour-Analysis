@@ -9,8 +9,10 @@ def _normalize_ids(df):
 
 
 def clean_completion(df):
-    df = df.copy()
+    df = df.drop_duplicates().copy()
     df = _normalize_ids(df)
+
+    df["status"] = df["status"].fillna("").astype(str).str.lower().str.strip()
 
     df["completion_pct"] = (
         df["completion_pct"]
