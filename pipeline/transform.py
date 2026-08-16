@@ -3,7 +3,7 @@ def transform_sessions(df):
         df.groupby(["student_id", "course_id"])
         .agg(
             total_duration=("duration_minutes", "sum"),
-            session_count=("duration_minutes", "count"),
+            session_count=("duration_minutes", "size"),
         )
         .reset_index()
     )
@@ -14,7 +14,7 @@ def transform_quiz(df):
         df.groupby(["student_id", "course_id"])
         .agg(
             avg_quiz_score=("score_pct", "mean"),
-            quiz_attempts=("attempt_number", "count"),
+            quiz_attempts=("attempt_number", "size"),
         )
         .reset_index()
     )
