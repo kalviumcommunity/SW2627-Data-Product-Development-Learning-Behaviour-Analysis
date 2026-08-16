@@ -3,6 +3,8 @@ import streamlit as st
 from components.kpi_card import render_kpi_card
 from components.insight_card import render_insight
 from components.student_segments import render_student_segments
+from components.section_header import render_section_header
+from components.charts import render_chart
 
 def render_overview():
     """Renders the overview page content."""
@@ -57,20 +59,20 @@ def render_overview():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Learning Behaviour Correlation")
-        st.caption("Activity metrics vs Completion")
-
-        st.info(
-            "Learning behaviour correlation chart will appear here."
+        render_section_header(
+            "Learning Behaviour Correlation",
+            "Activity metrics vs Completion",
         )
+
+        st.info("Chart will be added here.")
 
     with col2:
-        st.subheader("Course Completion Funnel")
-        st.caption("Milestone drop-off rates")
-
-        st.info(
-            "Course completion funnel will appear here."
+        render_section_header(
+            "Course Completion Funnel",
+            "Milestone drop-off rates",
         )
+
+        st.info("Chart will be added here.")
 
     st.divider()
 
