@@ -24,6 +24,9 @@ def run_pipeline():
     final_df = build_student_course_table(data)
 
     # SAVE
+    from pathlib import Path
+
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
     final_df.to_csv("data/processed/student_course.csv", index=False)
 
     return final_df
