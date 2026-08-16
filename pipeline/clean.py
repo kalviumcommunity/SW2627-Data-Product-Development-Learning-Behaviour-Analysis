@@ -2,10 +2,9 @@ import pandas as pd
 
 
 def _normalize_ids(df):
-    if "student_id" in df.columns:
-        df["student_id"] = df["student_id"].astype(str).str.strip()
-    if "course_id" in df.columns:
-        df["course_id"] = df["course_id"].astype(str).str.strip()
+    for col in ("student_id", "course_id"):
+        if col in df.columns:
+            df[col] = df[col].astype("string").str.strip()
     return df
 
 
