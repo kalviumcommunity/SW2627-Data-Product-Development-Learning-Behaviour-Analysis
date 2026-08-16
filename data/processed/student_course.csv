@@ -1,0 +1,4 @@
+student_id,course_id,enrollment_date,cohort,completion_pct,status,total_duration,session_count,avg_quiz_score,quiz_attempts
+S1,C1,2024-01-01,A,85,completed,75,2,85.0,2
+S2,C1,2024-01-02,A,60,in_progress,20,1,70.0,1
+S3,C2,2024-01-03,B,100,completed,60,1,95.0,1

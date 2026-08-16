@@ -1,1 +1,5 @@
-student_id,quiz_id,course_id,attempt_number,score_pct,timestamp
+student_id,course_id,attempt_number,score_pct
+S1,C1,1,80
+S1,C1,2,90
+S2,C1,1,70
+S3,C2,1,95

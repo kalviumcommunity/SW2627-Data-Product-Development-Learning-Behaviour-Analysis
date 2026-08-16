@@ -1,48 +1,49 @@
-"""Data cleaning utilities for LearnLens AI."""
-
-from __future__ import annotations
-
 import pandas as pd
 
 
-def clean_completion(df: pd.DataFrame) -> pd.DataFrame:
-	"""Remove duplicates and standardize completion data."""
-
-	df = df.drop_duplicates().copy()
-	df["status"] = df["status"].fillna("").astype(str).str.lower().str.strip()
-	df["completion_pct"] = pd.to_numeric(df["completion_pct"], errors="coerce").fillna(0)
-	return df
+def _normalize_ids(df):
+    for col in ("student_id", "course_id"):
+        if col in df.columns:
+            df[col] = df[col].astype("string").str.strip()
+    return df
 
 
-def clean_quiz(df: pd.DataFrame) -> pd.DataFrame:
-	"""Remove duplicates and standardize quiz data."""
+def clean_completion(df):
+    df = df.drop_duplicates().copy()
+    df = _normalize_ids(df)
 
-	df = df.drop_duplicates().copy()
-	df["score_pct"] = pd.to_numeric(df["score_pct"], errors="coerce").fillna(0)
-	df["attempt_number"] = pd.to_numeric(df["attempt_number"], errors="coerce").fillna(0).astype(int)
-	return df
+    df["status"] = df["status"].fillna("").astype(str).str.lower().str.strip()
 
+    df["completion_pct"] = (
+        df["completion_pct"]
+        .astype(str)
+        .str.replace("%", "", regex=False)
+    )
 
-def clean_sessions(df: pd.DataFrame) -> pd.DataFrame:
-	"""Remove duplicates and standardize session data."""
-
-	df = df.drop_duplicates().copy()
-	df["duration_minutes"] = pd.to_numeric(df["duration_minutes"], errors="coerce").fillna(0)
-	return df
-
-
-def clean_enrollment(df: pd.DataFrame) -> pd.DataFrame:
-	"""Remove duplicates and standardize enrollment data."""
-
-	return df.drop_duplicates().copy()
+    df["completion_pct"] = pd.to_numeric(df["completion_pct"], errors="coerce")
+    return df
 
 
-def clean_all_data(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
-	"""Apply the dataset-specific cleaning functions."""
+def clean_sessions(df):
+    df = df.copy()
+    df = _normalize_ids(df)
 
-	return {
-		"completion": clean_completion(data_dict["completion"]),
-		"quiz": clean_quiz(data_dict["quiz"]),
-		"sessions": clean_sessions(data_dict["sessions"]),
-		"enrollment": clean_enrollment(data_dict["enrollment"]),
-	}
+    df["duration_minutes"] = pd.to_numeric(df["duration_minutes"], errors="coerce")
+    return df
+
+
+def clean_quiz(df):
+    df = df.copy()
+    df = _normalize_ids(df)
+
+    df["attempt_number"] = pd.to_numeric(df["attempt_number"], errors="coerce")
+
+    df["score_pct"] = (
+        df["score_pct"]
+        .astype(str)
+        .str.replace("%", "", regex=False)
+    )
+
+    df["score_pct"] = pd.to_numeric(df["score_pct"], errors="coerce")
+
+    return df
