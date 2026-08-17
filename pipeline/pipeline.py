@@ -3,7 +3,7 @@ from pipeline.validate import validate_all
 from pipeline.clean import clean_completion, clean_sessions, clean_quiz
 from pipeline.transform import transform_sessions, transform_quiz
 from pipeline.join import build_student_course_table
-from pipeline.logger import logger   
+from pipeline.logger import logger
 
 
 def run_pipeline():
@@ -38,6 +38,8 @@ def run_pipeline():
     final_df = build_student_course_table(data)
 
     logger.info("Saving output...")
+    from pathlib import Path
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
     final_df.to_csv("data/processed/student_course.csv", index=False)
 
     logger.info("Pipeline completed successfully ✅")
