@@ -3,6 +3,8 @@ import streamlit as st
 from components.sidebar import render_sidebar
 from components.navbar import render_navbar
 from views.overview import render_overview
+from views.student_behaviour import render_student_behaviour
+
 
 st.set_page_config(
     page_title="LearnLens AI - Insight Engine",
@@ -21,8 +23,7 @@ _ = render_navbar()
 if selected_page == "Overview":
     render_overview()
 elif selected_page == "Student Behaviour":
-    st.title("Student Behaviour")
-    st.write("Detailed behavioural analysis and patterns.")
+    render_student_behaviour()
 elif selected_page == "Course Performance":
     st.title("Course Performance")
     st.write("Course completion metrics and performance KPIs.")
