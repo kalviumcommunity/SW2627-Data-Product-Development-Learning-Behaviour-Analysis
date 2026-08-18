@@ -28,7 +28,7 @@ def build_completion_funnel(df: pd.DataFrame) -> pd.DataFrame:
     data["completion_pct"] = pd.to_numeric(data["completion_pct"], errors="coerce")
     data = data.dropna(subset=["student_id", "course_id", "completion_pct"])
     data["completion_pct"] = data["completion_pct"].clip(0, 100)
-    data = data.drop_duplicates(["student_id", "course_id"])
+    data = data.groupby(["student_id", "course_id"], as_index=False)["completion_pct"].max()
 
     enrolled = len(data)
     if enrolled == 0:
