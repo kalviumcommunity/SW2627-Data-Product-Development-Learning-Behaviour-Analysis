@@ -4,7 +4,6 @@ from components.filters import render_filters
 from components.kpi_card import render_kpi_card
 from components.insight_card import render_insight
 from components.section_header import render_section_header
-from components.charts import render_chart
 
 
 def render_student_behaviour():
@@ -35,6 +34,7 @@ def render_student_behaviour():
             "In Progress",
             "Dropped",
         ],
+        key_prefix="student_behaviour",
     )
 
     st.divider()
