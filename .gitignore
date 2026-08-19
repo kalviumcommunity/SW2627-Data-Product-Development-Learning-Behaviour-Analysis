@@ -1,10 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
 # Virtual environment
 .venv/
 venv/
-
-# Python cache
-__pycache__/
-*.py[cod]
+ENV/
+env/
 
 # Environment variables / secrets
 .env
