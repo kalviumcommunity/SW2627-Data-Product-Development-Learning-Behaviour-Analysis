@@ -1,2 +1,4 @@
-BASE_DATA_PATH = "data/raw"
-PROCESSED_PATH = "data/processed/student_course.csv"
+from pathlib import Path
+
+BASE_DATA_PATH = Path("data/raw")
+PROCESSED_PATH = Path("data/processed")

@@ -1,47 +1,48 @@
-from pipeline.ingest import load_all_data
-from pipeline.validate import validate_all
-from pipeline.clean import clean_completion, clean_sessions, clean_quiz
-from pipeline.transform import transform_sessions, transform_quiz
-from pipeline.join import build_student_course_table
-from pipeline.logger import logger
+import logging
+
+from pipeline.config import BASE_DATA_PATH, PROCESSED_PATH
+
+logger = logging.getLogger(__name__)
 
 
 def run_pipeline():
     try:
-        logger.info("Loading data...")
-        data = load_all_data()
-    except Exception as e:
-        logger.error(f"Failed to load data: {e}")
+        data = load_all_data(BASE_DATA_PATH)
+    except Exception:
+        logger.exception("Data loading failed")
         raise
 
     try:
-        logger.info("Cleaning data...")
-        data["completion"] = clean_completion(data["completion"])
-        data["sessions"] = clean_sessions(data["sessions"])
-        data["quiz"] = clean_quiz(data["quiz"])
-    except Exception as e:
-        logger.error(f"Cleaning failed: {e}")
+        cleaned_data = clean_data(data)
+    except Exception:
+        logger.exception("Data cleaning failed")
         raise
 
     try:
-        logger.info("Validating data...")
-        validate_all(data)
-    except Exception as e:
-        logger.error(f"Validation failed: {e}")
+        validated_data = validate_data(cleaned_data)
+    except Exception:
+        logger.exception("Data validation failed")
         raise
 
-    logger.info("Transforming data...")
-    data["sessions"] = transform_sessions(data["sessions"])
-    data["quiz"] = transform_quiz(data["quiz"])
+    try:
+        transformed_data = transform_data(validated_data)
+    except Exception:
+        logger.exception("Data transformation failed")
+        raise
 
-    logger.info("Joining datasets...")
-    final_df = build_student_course_table(data)
+    try:
+        student_course = join_data(transformed_data)
+    except Exception:
+        logger.exception("Data joining failed")
+        raise
 
-    logger.info("Saving output...")
-    from pathlib import Path
-    Path("data/processed").mkdir(parents=True, exist_ok=True)
-    final_df.to_csv("data/processed/student_course.csv", index=False)
+    output_path = PROCESSED_PATH / "student_course.csv"
 
-    logger.info("Pipeline completed successfully ✅")
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        student_course.to_csv(output_path, index=False)
+    except Exception:
+        logger.exception("Saving processed data failed")
+        raise
 
-    return final_df
+    return student_course
