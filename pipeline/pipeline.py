@@ -1,48 +1,49 @@
-import logging
+"""End-to-end data pipeline orchestration for LearnLens AI."""
 
+from __future__ import annotations
+
+from pipeline.clean import clean_completion, clean_quiz, clean_sessions
 from pipeline.config import BASE_DATA_PATH, PROCESSED_PATH
-
-logger = logging.getLogger(__name__)
+from pipeline.ingest import load_all_data
+from pipeline.join import build_student_course_table
+from pipeline.logger import logger
+from pipeline.transform import transform_quiz, transform_sessions
+from pipeline.validate import validate_all
 
 
 def run_pipeline():
+    """Run ingestion, cleaning, validation, transformation, join, and save."""
     try:
+        logger.info("Loading source data from %s", BASE_DATA_PATH)
         data = load_all_data(BASE_DATA_PATH)
-    except Exception:
-        logger.exception("Data loading failed")
-        raise
 
-    try:
-        cleaned_data = clean_data(data)
-    except Exception:
-        logger.exception("Data cleaning failed")
-        raise
+        logger.info("Cleaning source data")
+        data["completion"] = clean_completion(data["completion"])
+        data["sessions"] = clean_sessions(data["sessions"])
+        data["quiz"] = clean_quiz(data["quiz"])
 
-    try:
-        validated_data = validate_data(cleaned_data)
-    except Exception:
-        logger.exception("Data validation failed")
-        raise
+        logger.info("Validating cleaned data")
+        validate_all(data)
 
-    try:
-        transformed_data = transform_data(validated_data)
-    except Exception:
-        logger.exception("Data transformation failed")
-        raise
+        logger.info("Transforming session and quiz data")
+        data["sessions"] = transform_sessions(data["sessions"])
+        data["quiz"] = transform_quiz(data["quiz"])
 
-    try:
-        student_course = join_data(transformed_data)
-    except Exception:
-        logger.exception("Data joining failed")
-        raise
+        logger.info("Building student-course table")
+        student_course = build_student_course_table(data)
 
-    output_path = PROCESSED_PATH / "student_course.csv"
-
-    try:
+        output_path = PROCESSED_PATH / "student_course.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        student_course.to_csv(output_path, index=False)
-    except Exception:
-        logger.exception("Saving processed data failed")
-        raise
 
-    return student_course
+        logger.info("Saving processed data to %s", output_path)
+        student_course.to_csv(output_path, index=False)
+
+        logger.info(
+            "Pipeline completed successfully: %d rows written",
+            len(student_course),
+        )
+        return student_course
+
+    except Exception:
+        logger.exception("Pipeline execution failed")
+        raise
