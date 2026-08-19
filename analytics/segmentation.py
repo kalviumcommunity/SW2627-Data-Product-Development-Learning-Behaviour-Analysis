@@ -7,31 +7,17 @@ Expected input columns:
 - student_id
 - course_id
 - total_study_hours
-- avg_session_length
 - quiz_accuracy
-- quiz_frequency
 - active_days
 - learning_streak
 - days_since_last_activity
 - weekly_sessions
 - completion_pct
-- status
 """
 
 from __future__ import annotations
 
 import pandas as pd
-
-
-SEGMENT_LABELS = (
-    "completed",
-    "high_engagement",
-    "struggling_learner",
-    "at_risk",
-    "low_engagement",
-    "consistent_learner",
-)
-
 
 def _require_columns(df: pd.DataFrame) -> None:
     required = {
@@ -63,9 +49,7 @@ def _segment_row(row: pd.Series) -> str:
     if completion >= 100:
         return "completed"
 
-    if inactivity >= 14 or (
-        active_days <= 2 and weekly_sessions < 1
-    ):
+    if inactivity >= 14:
         return "at_risk"
 
     if (
@@ -81,7 +65,7 @@ def _segment_row(row: pd.Series) -> str:
     if active_days <= 2 or weekly_sessions < 1:
         return "low_engagement"
 
-    if streak >= 3 or weekly_sessions >= 2:
+    if streak >= 2 or weekly_sessions >= 1.5:
         return "consistent_learner"
 
     return "low_engagement"
