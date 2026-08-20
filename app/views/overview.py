@@ -25,28 +25,28 @@ def render_overview():
         render_kpi_card(
             "Total Students",
             "12,450",
-            "↑ 4.2% vs last month",
+            "4.2% vs last month",
         )
 
     with col2:
         render_kpi_card(
             "Completion Rate",
             "68.2%",
-            "↑ 1.5% vs last month",
+            "1.5% vs last month",
         )
 
     with col3:
         render_kpi_card(
             "Dropout Rate",
             "14.8%",
-            "↑ 0.8% vs last month",
+            "0.8% vs last month",
         )
 
     with col4:
         render_kpi_card(
             "Avg Quiz Score",
             "76.4%",
-            "→ No change",
+            "0%",
         )
 
     st.divider()
