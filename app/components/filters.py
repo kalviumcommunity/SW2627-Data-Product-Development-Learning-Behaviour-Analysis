@@ -5,6 +5,7 @@ def render_filters(
     courses=None,
     segments=None,
     statuses=None,
+    key_prefix="filters",
 ):
     """
     Render reusable dashboard filters.
@@ -17,9 +18,14 @@ def render_filters(
     """
 
     # Default options
-    courses = courses or ["All Courses"]
-    segments = segments or ["All Segments"]
-    statuses = statuses or ["Any Status"]
+    if courses is None:
+        courses = ["All Courses"]
+
+    if segments is None:
+        segments = ["All Segments"]
+
+    if statuses is None:
+        statuses = ["Any Status"]
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -28,6 +34,7 @@ def render_filters(
             "Course",
             courses,
             label_visibility="collapsed",
+            key=f"{key_prefix}_course",
         )
 
     with col2:
@@ -35,6 +42,7 @@ def render_filters(
             "Date",
             value=None,
             label_visibility="collapsed",
+            key=f"{key_prefix}_date",
         )
 
     with col3:
@@ -42,6 +50,7 @@ def render_filters(
             "Segment",
             segments,
             label_visibility="collapsed",
+            key=f"{key_prefix}_segment",
         )
 
     with col4:
@@ -49,7 +58,15 @@ def render_filters(
             "Status",
             statuses,
             label_visibility="collapsed",
+            key=f"{key_prefix}_status",
         )
+
+    st.session_state[f"{key_prefix}_filters"] = {
+        "course": selected_course,
+        "date": selected_date,
+        "segment": selected_segment,
+        "status": selected_status,
+    }
 
     return (
         selected_course,

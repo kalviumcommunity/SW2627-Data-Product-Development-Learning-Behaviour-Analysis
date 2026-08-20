@@ -4,7 +4,6 @@ from components.kpi_card import render_kpi_card
 from components.insight_card import render_insight
 from components.student_segments import render_student_segments
 from components.section_header import render_section_header
-from components.charts import render_chart
 
 def render_overview():
     """Renders the overview page content."""

@@ -4,6 +4,7 @@ from components.sidebar import render_sidebar
 from components.navbar import render_navbar
 from views.overview import render_overview
 from views.student_behaviour import render_student_behaviour
+from views.course_performance import render_course_performance
 
 
 st.set_page_config(
@@ -25,8 +26,7 @@ if selected_page == "Overview":
 elif selected_page == "Student Behaviour":
     render_student_behaviour()
 elif selected_page == "Course Performance":
-    st.title("Course Performance")
-    st.write("Course completion metrics and performance KPIs.")
+    render_course_performance()
 elif selected_page == "Reports & Insights":
     st.title("Reports & Insights")
     st.write("Comprehensive institutional reports and key findings.")
