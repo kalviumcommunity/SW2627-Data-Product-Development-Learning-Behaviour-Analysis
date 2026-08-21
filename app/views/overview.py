@@ -34,7 +34,7 @@ def render_overview():
 
     service = AnalyticsService()
 
-    course, selected_date, selected_segment, status = render_filters(
+    course, _, _, status = render_filters(
         courses=service.course_options(dashboard),
         segments=[ALL_SEGMENTS],
         statuses=[
@@ -44,11 +44,10 @@ def render_overview():
             "Dropped",
         ],
         key_prefix="overview",
+        show_date=False,
+        show_segment=False,
     )
 
-    # The current backend does not expose a segment or date field suitable
-    # for filtering. Keep those controls visible for UI consistency, but do
-    # not invent filtering semantics for unavailable backend data.
     filtered = service.filter_data(
         dashboard,
         course=course,
@@ -67,22 +66,13 @@ def render_overview():
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        render_kpi_card(
-            "Active Students",
-            f"{kpis['active_students']:,}",
-        )
+        render_kpi_card("Active Students", f"{kpis['active_students']:,}")
 
     with col2:
-        render_kpi_card(
-            "Completion Rate",
-            f"{kpis['completion_rate']:.1f}%",
-        )
+        render_kpi_card("Completion Rate", f"{kpis['completion_rate']:.1f}%")
 
     with col3:
-        render_kpi_card(
-            "Dropout Rate",
-            f"{kpis['dropoff_rate']:.1f}%",
-        )
+        render_kpi_card("Dropout Rate", f"{kpis['dropoff_rate']:.1f}%")
 
     with col4:
         render_kpi_card(
@@ -218,20 +208,7 @@ def render_overview():
             "Overview is connected to the existing pipeline and analytics layer."
         )
         st.caption(
-            "Time-based behaviour metrics and learner segmentation will be "
-            "enabled when the backend provides the required timestamp fields."
+            "Course and Status filters are currently supported by the "
+            "available backend data. Date and Segment filters will be added "
+            "when the backend provides the required fields."
         )
-
-        if selected_date is not None:
-            st.info(
-                "Date selection is currently retained in the UI but is not "
-                "applied because the current backend contract has no usable "
-                "event date field."
-            )
-
-        if selected_segment != ALL_SEGMENTS:
-            st.info(
-                "Segment filtering is currently disabled because the current "
-                "backend dataset does not expose the required behavioural "
-                "features."
-            )

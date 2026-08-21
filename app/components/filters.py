@@ -12,6 +12,8 @@ def render_filters(
     segments=None,
     statuses=None,
     key_prefix="filters",
+    show_date=True,
+    show_segment=True,
 ):
     """Render reusable dashboard filters."""
 
@@ -19,9 +21,12 @@ def render_filters(
     segments = segments or [ALL_SEGMENTS]
     statuses = statuses or [ALL_STATUSES]
 
-    col1, col2, col3, col4 = st.columns(4)
+    visible_filters = 2 + int(show_date) + int(show_segment)
+    columns = st.columns(visible_filters)
 
-    with col1:
+    column_index = 0
+
+    with columns[column_index]:
         selected_course = st.selectbox(
             "Course",
             courses,
@@ -29,23 +34,33 @@ def render_filters(
             key=f"{key_prefix}_course",
         )
 
-    with col2:
-        selected_date = st.date_input(
-            "Date",
-            value=None,
-            label_visibility="collapsed",
-            key=f"{key_prefix}_date",
-        )
+    column_index += 1
 
-    with col3:
-        selected_segment = st.selectbox(
-            "Segment",
-            segments,
-            label_visibility="collapsed",
-            key=f"{key_prefix}_segment",
-        )
+    if show_date:
+        with columns[column_index]:
+            selected_date = st.date_input(
+                "Date",
+                value=None,
+                label_visibility="collapsed",
+                key=f"{key_prefix}_date",
+            )
+        column_index += 1
+    else:
+        selected_date = None
 
-    with col4:
+    if show_segment:
+        with columns[column_index]:
+            selected_segment = st.selectbox(
+                "Segment",
+                segments,
+                label_visibility="collapsed",
+                key=f"{key_prefix}_segment",
+            )
+        column_index += 1
+    else:
+        selected_segment = ALL_SEGMENTS
+
+    with columns[column_index]:
         selected_status = st.selectbox(
             "Status",
             statuses,

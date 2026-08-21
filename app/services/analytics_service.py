@@ -1,9 +1,4 @@
-"""Frontend-facing data access for LearnLens.
-
-This service consumes the analytics that are currently available in the
-repository's MVP data contract. It deliberately does not assume optional
-timestamp/start-time fields that are not present in the current datasets.
-"""
+"""Frontend-facing data access for LearnLens."""
 
 from __future__ import annotations
 
@@ -50,7 +45,7 @@ class AnalyticsService:
         course: str = ALL_COURSES,
         status: str = ALL_STATUSES,
     ) -> DashboardData:
-        """Apply only filters supported by the current backend schema."""
+        """Filter all supported datasets to the same learner population."""
 
         raw = {
             name: frame.copy()
@@ -58,21 +53,72 @@ class AnalyticsService:
         }
 
         if course != ALL_COURSES:
+            keys = None
+
             for name, frame in raw.items():
-                if "course_id" in frame.columns:
-                    raw[name] = frame[
+                if {"student_id", "course_id"}.issubset(frame.columns):
+                    frame = frame[
                         frame["course_id"].astype(str) == str(course)
                     ].copy()
+                    raw[name] = frame
+
+                    current_keys = frame[
+                        ["student_id", "course_id"]
+                    ].drop_duplicates()
+
+                    keys = (
+                        current_keys
+                        if keys is None
+                        else keys.merge(
+                            current_keys,
+                            on=["student_id", "course_id"],
+                            how="inner",
+                        )
+                    )
+
+            if keys is not None:
+                for name, frame in raw.items():
+                    if {"student_id", "course_id"}.issubset(frame.columns):
+                        raw[name] = frame.merge(
+                            keys,
+                            on=["student_id", "course_id"],
+                            how="inner",
+                        )
 
         if status != ALL_STATUSES:
-            for name, frame in raw.items():
-                if "status" in frame.columns:
-                    raw[name] = frame[
-                        frame["status"]
-                        .astype(str)
-                        .str.lower()
-                        .eq(status.lower())
-                    ].copy()
+            completion = raw["completion"]
+
+            if "status" in completion.columns:
+                completion = completion[
+                    completion["status"]
+                    .astype(str)
+                    .str.lower()
+                    .eq(status.lower())
+                ].copy()
+
+                raw["completion"] = completion
+
+                if not completion.empty:
+                    keys = completion[
+                        ["student_id", "course_id"]
+                    ].drop_duplicates()
+
+                    for name, frame in raw.items():
+                        if name == "completion":
+                            continue
+
+                        if {
+                            "student_id",
+                            "course_id",
+                        }.issubset(frame.columns):
+                            raw[name] = frame.merge(
+                                keys,
+                                on=["student_id", "course_id"],
+                                how="inner",
+                            )
+                else:
+                    for name, frame in raw.items():
+                        raw[name] = frame.iloc[0:0].copy()
 
         return DashboardData(raw=raw)
 
