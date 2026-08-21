@@ -1,5 +1,11 @@
 import streamlit as st
 
+from services.analytics_service import (
+    ALL_COURSES,
+    ALL_SEGMENTS,
+    ALL_STATUSES,
+)
+
 
 def render_filters(
     courses=None,
@@ -7,25 +13,11 @@ def render_filters(
     statuses=None,
     key_prefix="filters",
 ):
-    """
-    Render reusable dashboard filters.
+    """Render reusable dashboard filters."""
 
-    Returns:
-        selected_course,
-        selected_date,
-        selected_segment,
-        selected_status
-    """
-
-    # Default options
-    if courses is None:
-        courses = ["All Courses"]
-
-    if segments is None:
-        segments = ["All Segments"]
-
-    if statuses is None:
-        statuses = ["Any Status"]
+    courses = courses or [ALL_COURSES]
+    segments = segments or [ALL_SEGMENTS]
+    statuses = statuses or [ALL_STATUSES]
 
     col1, col2, col3, col4 = st.columns(4)
 
