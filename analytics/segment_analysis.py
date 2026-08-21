@@ -17,6 +17,24 @@ FEATURE_COLUMNS = [
     "status",
 ]
 
+NUMERIC_COLUMNS = [
+    "total_study_hours",
+    "quiz_accuracy",
+    "days_since_last_activity",
+    "completion_pct",
+]
+
+OUTPUT_COLUMNS = [
+    "segment",
+    "learner_count",
+    "completion_rate",
+    "dropoff_rate",
+    "avg_completion_pct",
+    "avg_study_hours",
+    "avg_quiz_accuracy",
+    "avg_days_since_last_activity",
+]
+
 
 def _require_columns(df: pd.DataFrame) -> None:
     missing = sorted(set(FEATURE_COLUMNS) - set(df.columns))
@@ -27,22 +45,20 @@ def _require_columns(df: pd.DataFrame) -> None:
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
     output = df[FEATURE_COLUMNS].copy()
 
-    numeric_columns = [
-        "total_study_hours",
-        "quiz_accuracy",
-        "days_since_last_activity",
-        "completion_pct",
-    ]
+    for column in NUMERIC_COLUMNS:
+        output[column] = pd.to_numeric(
+            output[column],
+            errors="coerce",
+        )
 
-    for column in numeric_columns:
-        output[column] = pd.to_numeric(output[column], errors="coerce")
-
-    if output[numeric_columns].isna().any().any():
+    if output[NUMERIC_COLUMNS].isna().any().any():
         raise ValueError(
             "Segment analysis contains invalid numeric feature values"
         )
 
-    output["completion_pct"] = output["completion_pct"].clip(0, 100)
+    if not output["completion_pct"].between(0, 100).all():
+        raise ValueError("completion_pct must be within the range 0-100")
+
     return output
 
 
@@ -54,10 +70,14 @@ def _validate_grain(df: pd.DataFrame) -> None:
 
     if duplicates.any():
         duplicate_keys = (
-            df.loc[duplicates, ["student_id", "course_id"]]
+            df.loc[
+                duplicates,
+                ["student_id", "course_id"],
+            ]
             .drop_duplicates()
             .to_dict("records")
         )
+
         raise ValueError(
             "Expected one row per student-course pair; "
             f"duplicate keys found: {duplicate_keys}"
@@ -72,19 +92,8 @@ def analyze_segments(df: pd.DataFrame) -> pd.DataFrame:
     """
     _require_columns(df)
 
-    columns = [
-        "segment",
-        "learner_count",
-        "completion_rate",
-        "dropoff_rate",
-        "avg_completion_pct",
-        "avg_study_hours",
-        "avg_quiz_accuracy",
-        "avg_days_since_last_activity",
-    ]
-
     if df.empty:
-        return pd.DataFrame(columns=columns)
+        return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
     _validate_grain(df)
     features = _prepare_features(df)
@@ -105,7 +114,7 @@ def analyze_segments(df: pd.DataFrame) -> pd.DataFrame:
     segmented["dropped"] = (
         segmented["status"]
         .fillna("")
-        .astype(str)
+        .astype("string")
         .str.strip()
         .str.lower()
         .eq("dropped")
@@ -130,6 +139,7 @@ def analyze_segments(df: pd.DataFrame) -> pd.DataFrame:
     summary["completion_rate"] = (
         summary["completion_rate"] * 100
     ).round(2)
+
     summary["dropoff_rate"] = (
         summary["dropoff_rate"] * 100
     ).round(2)
@@ -142,7 +152,11 @@ def analyze_segments(df: pd.DataFrame) -> pd.DataFrame:
     ]
     summary[average_columns] = summary[average_columns].round(2)
 
-    return summary.sort_values(
-        ["dropoff_rate", "segment"],
-        ascending=[False, True],
-    ).reset_index(drop=True)
+    return (
+        summary[OUTPUT_COLUMNS]
+        .sort_values(
+            ["dropoff_rate", "segment"],
+            ascending=[False, True],
+        )
+        .reset_index(drop=True)
+    )

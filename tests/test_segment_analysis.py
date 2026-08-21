@@ -21,8 +21,11 @@ def feature_data() -> pd.DataFrame:
             "weekly_sessions": [3.0, 0.5, 2.0, 0.5, 1.5],
             "completion_pct": [100, 35, 60, 20, 50],
             "status": [
-                "completed", "dropped", "in_progress",
-                "in_progress", "in_progress",
+                "completed",
+                "dropped",
+                "in_progress",
+                "in_progress",
+                "in_progress",
             ],
         }
     )
@@ -63,6 +66,7 @@ def test_segment_analysis_calculates_metrics():
 def test_segments_are_sorted_by_dropoff_rate():
     result = analyze_segments(feature_data())
     rates = result["dropoff_rate"].tolist()
+
     assert rates == sorted(rates, reverse=True)
 
 
@@ -85,6 +89,7 @@ def test_empty_input_returns_stable_schema():
 
 def test_missing_required_column_fails():
     broken = feature_data().drop(columns=["status"])
+
     with pytest.raises(ValueError, match="status"):
         analyze_segments(broken)
 
@@ -95,6 +100,14 @@ def test_invalid_numeric_value_fails():
     broken.loc[0, "quiz_accuracy"] = "invalid"
 
     with pytest.raises(ValueError, match="invalid numeric"):
+        analyze_segments(broken)
+
+
+def test_out_of_range_completion_fails():
+    broken = feature_data()
+    broken.loc[0, "completion_pct"] = 101
+
+    with pytest.raises(ValueError, match="completion_pct"):
         analyze_segments(broken)
 
 
