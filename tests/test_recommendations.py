@@ -1,5 +1,4 @@
-"""Tests for deterministic learner recommendations."""
-
+"""Tests for learner intervention recommendations."""
 import pandas as pd
 import pytest
 
@@ -25,8 +24,17 @@ def feature_data() -> pd.DataFrame:
     )
 
 
-def test_generates_expected_actions_and_priorities():
+def test_generates_expected_recommendations():
     result = generate_recommendations(feature_data())
+
+    assert result["segment"].tolist() == [
+        "completed",
+        "at_risk",
+        "struggling_learner",
+        "low_engagement",
+        "consistent_learner",
+        "low_engagement",
+    ]
 
     assert result["action"].tolist() == [
         "completion_follow_up",
@@ -47,7 +55,7 @@ def test_generates_expected_actions_and_priorities():
     ]
 
 
-def test_output_schema_is_stable():
+def test_output_schema():
     result = generate_recommendations(feature_data())
 
     assert list(result.columns) == [
@@ -67,6 +75,20 @@ def test_messages_are_present():
     assert (result["message"].str.len() > 0).all()
 
 
+def test_recommendations_use_canonical_segmentation_rules():
+    data = feature_data()
+
+    # This input sits on a segmentation boundary. The recommendation must
+    # follow segment_learners(), not a duplicated local copy of the rules.
+    data.loc[4, "learning_streak"] = 1
+    data.loc[4, "weekly_sessions"] = 1.0
+
+    result = generate_recommendations(data)
+
+    assert result.loc[4, "segment"] == "low_engagement"
+    assert result.loc[4, "action"] == "engagement_nudge"
+
+
 def test_completed_has_priority_over_risk_signals():
     data = feature_data()
     data.loc[0, "days_since_last_activity"] = 30
@@ -79,7 +101,9 @@ def test_completed_has_priority_over_risk_signals():
 
 
 def test_empty_input_returns_stable_schema():
-    result = generate_recommendations(feature_data().iloc[0:0].copy())
+    result = generate_recommendations(
+        feature_data().iloc[0:0].copy()
+    )
 
     assert result.empty
     assert list(result.columns) == [
@@ -144,8 +168,7 @@ def test_summary_counts_and_percentages():
 def test_summary_prioritizes_high_before_medium_and_low():
     result = recommendation_summary(feature_data())
 
-    priorities = result["priority"].tolist()
-    assert priorities == sorted(
-        priorities,
+    assert result["priority"].tolist() == sorted(
+        result["priority"].tolist(),
         key={"high": 0, "medium": 1, "low": 2}.get,
     )
