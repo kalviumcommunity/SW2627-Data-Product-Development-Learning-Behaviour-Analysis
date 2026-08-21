@@ -1,4 +1,4 @@
-"""Frontend-facing data access for LearnLens."""
+"""Frontend-facing access to the existing analytics layer."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from analytics.kpis import kpi_summary
 from analytics.funnel import build_completion_funnel
+from analytics.kpis import kpi_summary
 from pipeline.clean import clean_completion, clean_quiz, clean_sessions
 from pipeline.ingest import load_all_data
 
@@ -24,18 +24,16 @@ class DashboardData:
 
 
 class AnalyticsService:
-    """Application boundary between Streamlit views and existing analytics."""
+    """Application boundary between Streamlit and existing analytics."""
 
     def __init__(self, data_path: str | Path = "data/raw") -> None:
         self.data_path = Path(data_path)
 
     def load(self) -> DashboardData:
         data = load_all_data(self.data_path)
-
         data["completion"] = clean_completion(data["completion"])
         data["quiz"] = clean_quiz(data["quiz"])
         data["sessions"] = clean_sessions(data["sessions"])
-
         return DashboardData(raw=data)
 
     @staticmethod
@@ -45,80 +43,36 @@ class AnalyticsService:
         course: str = ALL_COURSES,
         status: str = ALL_STATUSES,
     ) -> DashboardData:
-        """Filter all supported datasets to the same learner population."""
+        """Filter all datasets using one canonical student-course population."""
 
-        raw = {
-            name: frame.copy()
-            for name, frame in dashboard.raw.items()
-        }
+        raw = {name: frame.copy() for name, frame in dashboard.raw.items()}
+        keys = ["student_id", "course_id"]
+        completion = raw["completion"]
+
+        if not set(keys).issubset(completion.columns):
+            return DashboardData(raw=raw)
+
+        population = completion[keys].drop_duplicates()
 
         if course != ALL_COURSES:
-            keys = None
+            population = population[
+                population["course_id"].astype(str) == str(course)
+            ]
 
-            for name, frame in raw.items():
-                if {"student_id", "course_id"}.issubset(frame.columns):
-                    frame = frame[
-                        frame["course_id"].astype(str) == str(course)
-                    ].copy()
-                    raw[name] = frame
+        if status != ALL_STATUSES and "status" in completion.columns:
+            matching = completion[
+                completion["status"].astype(str).str.lower().eq(status.lower())
+            ]
+            status_population = matching[keys].drop_duplicates()
+            population = population.merge(
+                status_population, on=keys, how="inner"
+            )
 
-                    current_keys = frame[
-                        ["student_id", "course_id"]
-                    ].drop_duplicates()
-
-                    keys = (
-                        current_keys
-                        if keys is None
-                        else keys.merge(
-                            current_keys,
-                            on=["student_id", "course_id"],
-                            how="inner",
-                        )
-                    )
-
-            if keys is not None:
-                for name, frame in raw.items():
-                    if {"student_id", "course_id"}.issubset(frame.columns):
-                        raw[name] = frame.merge(
-                            keys,
-                            on=["student_id", "course_id"],
-                            how="inner",
-                        )
-
-        if status != ALL_STATUSES:
-            completion = raw["completion"]
-
-            if "status" in completion.columns:
-                completion = completion[
-                    completion["status"]
-                    .astype(str)
-                    .str.lower()
-                    .eq(status.lower())
-                ].copy()
-
-                raw["completion"] = completion
-
-                if not completion.empty:
-                    keys = completion[
-                        ["student_id", "course_id"]
-                    ].drop_duplicates()
-
-                    for name, frame in raw.items():
-                        if name == "completion":
-                            continue
-
-                        if {
-                            "student_id",
-                            "course_id",
-                        }.issubset(frame.columns):
-                            raw[name] = frame.merge(
-                                keys,
-                                on=["student_id", "course_id"],
-                                how="inner",
-                            )
-                else:
-                    for name, frame in raw.items():
-                        raw[name] = frame.iloc[0:0].copy()
+        for name, frame in raw.items():
+            if set(keys).issubset(frame.columns):
+                raw[name] = frame.merge(
+                    population, on=keys, how="inner"
+                )
 
         return DashboardData(raw=raw)
 
@@ -135,7 +89,6 @@ class AnalyticsService:
     @staticmethod
     def course_options(dashboard: DashboardData) -> list[str]:
         completion = dashboard.raw["completion"]
-
         if "course_id" not in completion.columns:
             return [ALL_COURSES]
 
@@ -147,5 +100,4 @@ class AnalyticsService:
             .sort_values()
             .tolist()
         )
-
         return [ALL_COURSES, *courses]

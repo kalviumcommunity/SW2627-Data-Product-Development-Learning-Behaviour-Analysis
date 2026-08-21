@@ -16,31 +16,26 @@ def render_filters(
     show_segment=True,
 ):
     """Render reusable dashboard filters."""
-
     courses = courses or [ALL_COURSES]
     segments = segments or [ALL_SEGMENTS]
     statuses = statuses or [ALL_STATUSES]
 
     visible_filters = 2 + int(show_date) + int(show_segment)
     columns = st.columns(visible_filters)
-
     column_index = 0
 
     with columns[column_index]:
         selected_course = st.selectbox(
-            "Course",
-            courses,
+            "Course", courses,
             label_visibility="collapsed",
             key=f"{key_prefix}_course",
         )
-
     column_index += 1
 
     if show_date:
         with columns[column_index]:
             selected_date = st.date_input(
-                "Date",
-                value=None,
+                "Date", value=None,
                 label_visibility="collapsed",
                 key=f"{key_prefix}_date",
             )
@@ -51,8 +46,7 @@ def render_filters(
     if show_segment:
         with columns[column_index]:
             selected_segment = st.selectbox(
-                "Segment",
-                segments,
+                "Segment", segments,
                 label_visibility="collapsed",
                 key=f"{key_prefix}_segment",
             )
@@ -62,8 +56,7 @@ def render_filters(
 
     with columns[column_index]:
         selected_status = st.selectbox(
-            "Status",
-            statuses,
+            "Status", statuses,
             label_visibility="collapsed",
             key=f"{key_prefix}_status",
         )
@@ -75,9 +68,4 @@ def render_filters(
         "status": selected_status,
     }
 
-    return (
-        selected_course,
-        selected_date,
-        selected_segment,
-        selected_status,
-    )
+    return selected_course, selected_date, selected_segment, selected_status
