@@ -66,9 +66,11 @@ def test_missing_required_column_fails(feature_data):
     with pytest.raises(ValueError, match="quiz_accuracy"):
         segment_learners(broken)
 
-
 def test_invalid_numeric_values_fail(feature_data):
     broken = feature_data.copy()
+
+    broken["active_days"] = broken["active_days"].astype(object)
+
     broken.loc[0, "active_days"] = "invalid"
 
     with pytest.raises(ValueError, match="invalid numeric"):
