@@ -5,6 +5,7 @@ from components.navbar import render_navbar
 from views.overview import render_overview
 from views.student_behaviour import render_student_behaviour
 from views.course_performance import render_course_performance
+from views.reports_insights import render_reports_insights
 
 
 st.set_page_config(
@@ -28,8 +29,7 @@ elif selected_page == "Student Behaviour":
 elif selected_page == "Course Performance":
     render_course_performance()
 elif selected_page == "Reports & Insights":
-    st.title("Reports & Insights")
-    st.write("Comprehensive institutional reports and key findings.")
+    render_reports_insights()
 elif selected_page == "Settings":
     st.title("Settings")
     st.write("System configuration and user preferences.")

@@ -43,6 +43,17 @@ def render_course_performance():
 
     st.divider()
 
+    course_data = {
+        "total_courses": 24,
+        "completion_rate": "68.2%",
+        "quiz_score": "76.4%",
+        "dropout_rate": "14.8%",
+        "top_course": {
+            "name": "Python Fundamentals",
+            "completion_rate": "82.4%",
+        },
+    }
+
     # -----------------------------
     # KPI METRICS
     # -----------------------------
@@ -53,28 +64,28 @@ def render_course_performance():
         render_kpi_card(
             "Total Courses",
             "24",
-            "↑ 2 new",
+            "2 new",
         )
 
     with col2:
         render_kpi_card(
             "Avg Completion Rate",
             "68.2%",
-            "↑ 3.4%",
+            "3.4%",
         )
 
     with col3:
         render_kpi_card(
             "Avg Quiz Score",
             "76.4%",
-            "↑ 2.1%",
+            "2.1%",
         )
 
     with col4:
         render_kpi_card(
             "Avg Drop-off Rate",
             "14.8%",
-            "↓ 1.2%",
+            "-1.2%",
         )
 
     st.divider()
@@ -122,6 +133,25 @@ def render_course_performance():
     # KEY INSIGHTS
     # -----------------------------
 
+    insights = [
+        {
+            "title": "Strong Completion",
+            "message": (
+                "Courses with consistent weekly activity "
+                "show higher completion rates."
+            ),
+            "type": "success",
+        },
+        {
+            "title": "Performance Gap",
+            "message": (
+                "Courses with lower quiz performance "
+                "show increased drop-off."
+            ),
+            "type": "warning",
+        },
+    ]
+
     col1, col2 = st.columns([1.6, 1])
 
     with col1:
@@ -130,23 +160,21 @@ def render_course_performance():
             "Important patterns identified across courses.",
         )
 
-        render_insight(
-            "Strong Completion",
-            "Courses with consistent weekly activity show higher completion rates.",
-            "success",
-        )
-
-        render_insight(
-            "Performance Gap",
-            "Courses with lower quiz performance show increased drop-off.",
-            "warning",
-        )
+        for insight in insights:
+            render_insight(
+                insight["title"],
+                insight["message"],
+                insight["type"],
+            )
 
     with col2:
         render_section_header("Top Performing Course")
 
+        top_course = course_data["top_course"]
+
         st.metric(
-            "Python Fundamentals",
-            "82.4%",
             "Completion Rate",
+            top_course["completion_rate"],
         )
+
+        st.caption(top_course["name"])

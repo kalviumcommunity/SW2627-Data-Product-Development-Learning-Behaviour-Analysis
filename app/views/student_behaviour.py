@@ -46,28 +46,28 @@ def render_student_behaviour():
         render_kpi_card(
             "Avg Study Time",
             "5.2 hrs",
-            "↑ 4.2%",
+            "4.2%",
         )
 
     with col2:
         render_kpi_card(
             "Weekly Sessions",
             "4",
-            "↑ 2.1%",
+            "2.1%",
         )
 
     with col3:
         render_kpi_card(
             "Quiz Attempts",
             "1.8",
-            "↑ 3.4%",
+            "3.4%",
         )
 
     with col4:
         render_kpi_card(
             "Assignment Completion",
             "74%",
-            "↑ 5.2%",
+            "5.2%",
         )
 
     st.divider()
