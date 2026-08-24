@@ -1,37 +1,29 @@
-"""Rule-based learner behaviour.
+"""Rule-based learner behaviour segmentation.
 
-The segmentation layer converts the existing student-course behavioural
-features into deterministic, explainable learner segments.
-
-Expected input columns:
-- student_id
-- course_id
-- total_study_hours
-- quiz_accuracy
-- active_days
-- learning_streak
-- days_since_last_activity
-- weekly_sessions
-- completion_pct
+The segmentation layer converts student-course behavioural features into
+deterministic, explainable learner segments.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 
+
+REQUIRED_COLUMNS = {
+    "student_id",
+    "course_id",
+    "total_study_hours",
+    "quiz_accuracy",
+    "active_days",
+    "learning_streak",
+    "days_since_last_activity",
+    "weekly_sessions",
+    "completion_pct",
+}
+
+
 def _require_columns(df: pd.DataFrame) -> None:
-    required = {
-        "student_id",
-        "course_id",
-        "total_study_hours",
-        "quiz_accuracy",
-        "active_days",
-        "learning_streak",
-        "days_since_last_activity",
-        "weekly_sessions",
-        "completion_pct",
-    }
-    missing = sorted(required - set(df.columns))
+    missing = sorted(REQUIRED_COLUMNS - set(df.columns))
     if missing:
         raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
@@ -41,10 +33,10 @@ def _segment_row(row: pd.Series) -> str:
     completion = float(row["completion_pct"])
     quiz_accuracy = float(row["quiz_accuracy"])
     active_days = float(row["active_days"])
-    streak = float(row["learning_streak"])
+    study_hours = float(row["total_study_hours"])
     inactivity = float(row["days_since_last_activity"])
     weekly_sessions = float(row["weekly_sessions"])
-    study_hours = float(row["total_study_hours"])
+    streak = float(row["learning_streak"])
 
     if completion >= 100:
         return "completed"
@@ -59,7 +51,9 @@ def _segment_row(row: pd.Series) -> str:
     ):
         return "high_engagement"
 
-    if quiz_accuracy < 50 and (active_days >= 2 or weekly_sessions >= 1):
+    if quiz_accuracy < 50 and (
+        active_days >= 2 or weekly_sessions >= 1
+    ):
         return "struggling_learner"
 
     if active_days <= 2 or weekly_sessions < 1:
@@ -72,7 +66,7 @@ def _segment_row(row: pd.Series) -> str:
 
 
 def segment_learners(df: pd.DataFrame) -> pd.DataFrame:
-    """Return student-course records with an explainable behaviour segment."""
+    """Return one deterministic segment for each student-course row."""
     _require_columns(df)
 
     output = df.copy()
@@ -88,43 +82,21 @@ def segment_learners(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     for column in numeric_columns:
-        output[column] = pd.to_numeric(
-            output[column], errors="coerce"
-        )
+        output[column] = pd.to_numeric(output[column], errors="coerce")
 
     if output.empty:
         output["segment"] = pd.Series(dtype="object")
-        return output[["student_id", "course_id", "segment"]]
+        return output[
+            ["student_id", "course_id", "segment"]
+        ].reset_index(drop=True)
 
     if output[numeric_columns].isna().any().any():
-        raise ValueError("Behavioural feature columns contain invalid numeric values")
+        raise ValueError(
+            "Behavioural feature columns contain invalid numeric values"
+        )
 
     output["segment"] = output.apply(_segment_row, axis=1)
 
-    return output[["student_id", "course_id", "segment"]].reset_index(drop=True)
-
-
-def segment_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """Return segment counts and percentages."""
-    segmented = segment_learners(df)
-
-    if segmented.empty:
-        return pd.DataFrame(
-            columns=["segment", "student_count", "percentage"]
-        )
-
-    summary = (
-        segmented.groupby("segment", as_index=False)
-        .size()
-        .rename(columns={"size": "student_count"})
-    )
-
-    total = summary["student_count"].sum()
-    summary["percentage"] = (
-        summary["student_count"] / total * 100
-    ).round(2)
-
-    return summary.sort_values(
-        ["student_count", "segment"],
-        ascending=[False, True],
-    ).reset_index(drop=True)
+    return output[
+        ["student_id", "course_id", "segment"]
+    ].reset_index(drop=True)
