@@ -7,17 +7,16 @@ from components.filters import render_filters
 from components.insight_card import render_insight
 from components.kpi_card import render_kpi_card
 from components.section_header import render_section_header
-from services.analytics_service import ALL_SEGMENTS, ALL_STATUSES, AnalyticsService
+from services.analytics_service import ALL_STATUSES, AnalyticsService
 
 
 @st.cache_data(show_spinner=False)
 def _load_dashboard_data(data_path: str = "data/raw"):
-    """Cache cleaned source data between Streamlit reruns."""
     return AnalyticsService(data_path).load()
 
 
 def render_student_behaviour():
-    """Render Student Behaviour using the current backend data contract."""
+    """Render Student Behaviour using the current analytics contract."""
 
     st.title("Student Behaviour")
     st.caption("Understand how students are engaging with their courses.")
@@ -33,7 +32,6 @@ def render_student_behaviour():
 
     course, _, _, status = render_filters(
         courses=service.course_options(dashboard),
-        segments=[ALL_SEGMENTS],
         statuses=[
             ALL_STATUSES,
             "Completed",
@@ -68,19 +66,13 @@ def render_student_behaviour():
             "Avg Study Time",
             f"{metrics['avg_study_time_hours']:.2f} hrs",
         )
-
     with col2:
-        render_kpi_card(
-            "Avg Sessions",
-            f"{metrics['avg_sessions']:.2f}",
-        )
-
+        render_kpi_card("Avg Sessions", f"{metrics['avg_sessions']:.2f}")
     with col3:
         render_kpi_card(
             "Avg Quiz Attempts",
             f"{metrics['avg_quiz_attempts']:.2f}",
         )
-
     with col4:
         render_kpi_card(
             "Completion Rate",
@@ -112,6 +104,7 @@ def render_student_behaviour():
                 quiz_summary,
                 on=["student_id", "course_id"],
                 how="inner",
+                validate="one_to_one",
             )
 
             if chart_data.empty:
@@ -166,8 +159,8 @@ def render_student_behaviour():
 
     with col1:
         render_section_header(
-            "Learning Activity by Course",
-            "Study time derived from available session-duration data.",
+            "Study Hours by Course",
+            "Total recorded study time from session-duration data.",
         )
 
         sessions = filtered.raw["sessions"]
@@ -231,7 +224,7 @@ def render_student_behaviour():
         render_insight(
             "Study Activity",
             (
-                f"Average recorded study time is "
+                f"Average study time per learner-course is "
                 f"{metrics['avg_study_time_hours']:.2f} hours."
             ),
             "info",
@@ -239,6 +232,6 @@ def render_student_behaviour():
 
         st.caption(
             "Time-series metrics such as learning streaks, active days, and "
-            "weekly activity are not inferred because the current MVP data "
-            "does not contain timestamped session/quiz events."
+            "weekly activity require timestamped session/quiz events and are "
+            "not inferred from the current MVP dataset."
         )
