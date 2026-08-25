@@ -2,3 +2,15 @@ student_id,course_id,completion_pct,status
 S1,C1,85,completed
 S2,C1,60,in_progress
 S3,C2,100,completed
+S4,C1,45,in_progress
+S5,C2,75,in_progress
+S6,C3,90,completed
+S7,C3,30,in_progress
+S8,C1,100,completed
+S9,C2,55,in_progress
+S10,C3,70,in_progress
+S11,C1,25,in_progress
+S12,C2,95,completed
+S13,C3,100,completed
+S14,C1,80,in_progress
+S15,C2,40,in_progress
