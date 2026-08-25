@@ -36,37 +36,53 @@ def test_valid_pipeline_output_returns_quality_report():
         {"completion": source_data(), "sessions": source_data()},
         student_course_data(),
     )
+
     assert list(report["dataset"]) == ["completion", "sessions"]
     assert report["valid"].tolist() == [True, True]
 
 
-def test_invalid_source_dataset_blocks_pipeline_for_blank_id():
+def test_invalid_source_blank_id_blocks_pipeline():
     broken = source_data()
     broken.loc[0, "student_id"] = ""
 
-    with pytest.raises(ValueError, match="data-quality checks failed.*completion"):
+    with pytest.raises(
+        ValueError,
+        match="data-quality checks failed.*completion",
+    ):
         validate_pipeline_output({"completion": broken}, student_course_data())
 
 
-def test_invalid_source_dataset_blocks_pipeline_for_missing_value():
+def test_invalid_source_missing_value_blocks_pipeline():
     broken = source_data()
     broken.loc[0, "value"] = None
 
-    with pytest.raises(ValueError, match="data-quality checks failed.*completion"):
+    with pytest.raises(
+        ValueError,
+        match="data-quality checks failed.*completion",
+    ):
         validate_pipeline_output({"completion": broken}, student_course_data())
 
 
-def test_invalid_source_dataset_blocks_pipeline_for_duplicate_rows():
-    broken = pd.concat([source_data(), source_data().iloc[[0]]], ignore_index=True)
+def test_invalid_source_duplicate_rows_blocks_pipeline():
+    broken = pd.concat(
+        [source_data(), source_data().iloc[[0]]],
+        ignore_index=True,
+    )
 
-    with pytest.raises(ValueError, match="data-quality checks failed.*completion"):
+    with pytest.raises(
+        ValueError,
+        match="data-quality checks failed.*completion",
+    ):
         validate_pipeline_output({"completion": broken}, student_course_data())
 
 
-def test_empty_source_dataset_blocks_pipeline():
+def test_empty_source_blocks_pipeline():
     broken = source_data().iloc[0:0].copy()
 
-    with pytest.raises(ValueError, match="data-quality checks failed.*completion"):
+    with pytest.raises(
+        ValueError,
+        match="data-quality checks failed.*completion",
+    ):
         validate_pipeline_output({"completion": broken}, student_course_data())
 
 
@@ -98,7 +114,10 @@ def test_invalid_student_course_metric_range_blocks_pipeline(column, value):
     broken = student_course_data()
     broken.loc[0, column] = value
 
-    with pytest.raises(ValueError, match="invalid values|expected range 0-100"):
+    with pytest.raises(
+        ValueError,
+        match="invalid values|expected range 0-100",
+    ):
         validate_pipeline_output({"completion": source_data()}, broken)
 
 

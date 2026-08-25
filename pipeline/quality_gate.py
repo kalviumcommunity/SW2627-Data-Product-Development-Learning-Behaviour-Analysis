@@ -6,8 +6,8 @@ This module is the enforcement boundary around the canonical validators in
 
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 
 import pandas as pd
 
@@ -18,7 +18,15 @@ def validate_pipeline_output(
     source_datasets: Mapping[str, pd.DataFrame],
     student_course_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Validate pipeline inputs and the final student-course output."""
+    """Validate source datasets and the final student-course output.
+
+    Returns the canonical source-dataset quality report.
+
+    Raises:
+        TypeError: for invalid input types.
+        ValueError: when any source dataset or the final student-course
+            analytics handoff fails its canonical quality checks.
+    """
     if not isinstance(source_datasets, Mapping):
         raise TypeError(
             "source_datasets must be a mapping of dataset names to pandas DataFrames"
@@ -41,7 +49,7 @@ def write_quality_report(
     report: pd.DataFrame,
     output_path: str | Path,
 ) -> Path:
-    """Persist a quality report to CSV and return the written path."""
+    """Persist a canonical quality report to CSV."""
     if not isinstance(report, pd.DataFrame):
         raise TypeError("report must be a pandas DataFrame")
 
