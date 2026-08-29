@@ -52,10 +52,15 @@ def render_course_performance():
         show_segment=False,
     )
 
+    status_value = (
+        status
+        if status == ALL_STATUSES
+        else status.strip().lower().replace(" ", "_")
+    )
     filtered = service.filter_data(
         dashboard,
         course=course,
-        status=status,
+        status=status_value,
     )
 
     try:
@@ -184,7 +189,7 @@ def render_course_performance():
     st.dataframe(
         display,
         hide_index=True,
-        width="stretch",
+        use_container_width=True,
     )
 
     st.divider()
