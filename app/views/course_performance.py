@@ -1,155 +1,207 @@
+"""Course Performance dashboard view."""
+
+import plotly.express as px
 import streamlit as st
 
+from components.charts import render_chart
 from components.filters import render_filters
-from components.kpi_card import render_kpi_card
 from components.insight_card import render_insight
+from components.kpi_card import render_kpi_card
 from components.section_header import render_section_header
+from services.analytics_service import (
+    ALL_SEGMENTS,
+    ALL_STATUSES,
+    AnalyticsService,
+)
+
+
+@st.cache_data(show_spinner=False)
+def _load_dashboard_data(data_path: str = "data/raw"):
+    """Load and cache cleaned dashboard data."""
+    return AnalyticsService(data_path).load()
 
 
 def render_course_performance():
-    """Render the Course Performance dashboard."""
+    """Render course-level performance from the analytics service."""
 
     st.title("Course Performance")
-
     st.caption(
         "Compare course completion, engagement, and learning performance."
     )
 
-    # -----------------------------
-    # FILTERS
-    # -----------------------------
+    try:
+        dashboard = _load_dashboard_data()
+    except (FileNotFoundError, ValueError, KeyError) as exc:
+        st.error("Unable to load learning analytics.")
+        st.caption(str(exc))
+        return
 
-    course, date, segment, status = render_filters(
-        courses=[
-            "All Courses",
-            "Python Fundamentals",
-            "Data Science",
-            "Web Development",
-        ],
-        segments=[
-            "All Segments",
-            "High Achievers",
-            "Consistent Learners",
-            "Silent At-Risk",
-        ],
+    service = AnalyticsService()
+
+    course, _, _, status = render_filters(
+        courses=service.course_options(dashboard),
+        segments=[ALL_SEGMENTS],
         statuses=[
-            "Any Status",
+            ALL_STATUSES,
             "Completed",
             "In Progress",
             "Dropped",
         ],
-        key_prefix="course_performance"
+        key_prefix="course_performance",
+        show_date=False,
+        show_segment=False,
     )
 
+    status_value = (
+        status
+        if status == ALL_STATUSES
+        else status.strip().lower().replace(" ", "_")
+    )
+    filtered = service.filter_data(
+        dashboard,
+        course=course,
+        status=status_value,
+    )
+
+    try:
+        metrics = service.course_performance(filtered)
+    except (ValueError, KeyError) as exc:
+        st.error("Unable to calculate course performance.")
+        st.caption(str(exc))
+        return
+
+    if metrics.empty:
+        st.info("No course data matches the selected filters.")
+        return
+
     st.divider()
-
-    course_data = {
-        "total_courses": 24,
-        "completion_rate": "68.2%",
-        "quiz_score": "76.4%",
-        "dropout_rate": "14.8%",
-        "top_course": {
-            "name": "Python Fundamentals",
-            "completion_rate": "82.4%",
-        },
-    }
-
-    # -----------------------------
-    # KPI METRICS
-    # -----------------------------
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         render_kpi_card(
             "Total Courses",
-            "24",
-            "2 new",
+            f"{metrics['course_id'].nunique():,}",
         )
 
     with col2:
         render_kpi_card(
             "Avg Completion Rate",
-            "68.2%",
-            "3.4%",
+            f"{metrics['completion_rate'].mean():.1f}%",
         )
 
     with col3:
         render_kpi_card(
             "Avg Quiz Score",
-            "76.4%",
-            "2.1%",
+            f"{metrics['avg_quiz_score'].mean():.1f}%",
         )
 
     with col4:
         render_kpi_card(
             "Avg Drop-off Rate",
-            "14.8%",
-            "-1.2%",
+            f"{metrics['dropout_rate'].mean():.1f}%",
         )
 
     st.divider()
-
-    # -----------------------------
-    # COURSE CHARTS
-    # -----------------------------
 
     col1, col2 = st.columns(2)
 
     with col1:
         render_section_header(
             "Course Completion Comparison",
-            "Completion rate across courses.",
+            "Completion rate across the selected course population.",
         )
 
-        st.info("Course completion chart will be added here.")
+        fig = px.bar(
+            metrics,
+            x="course_id",
+            y="completion_rate",
+            text="completion_rate",
+            labels={
+                "course_id": "Course",
+                "completion_rate": "Completion rate (%)",
+            },
+        )
+        fig.update_traces(
+            texttemplate="%{text:.1f}%",
+            textposition="outside",
+        )
+        fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=20, b=10),
+        )
+        render_chart(fig)
 
     with col2:
         render_section_header(
             "Course Engagement",
-            "Student activity and engagement across courses.",
+            "Recorded study hours and sessions by course.",
         )
 
-        st.info("Course engagement chart will be added here.")
+        fig = px.bar(
+            metrics,
+            x="course_id",
+            y="study_hours",
+            hover_data=[
+                "sessions",
+                "active_students",
+            ],
+            labels={
+                "course_id": "Course",
+                "study_hours": "Study hours",
+                "sessions": "Sessions",
+                "active_students": "Active students",
+            },
+        )
+        fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=20, b=10),
+        )
+        render_chart(fig)
 
     st.divider()
-
-    # -----------------------------
-    # COURSE PERFORMANCE
-    # -----------------------------
 
     render_section_header(
         "Course Performance Comparison",
-        "Compare completion, quiz performance, and engagement.",
+        "Compare completion, quiz performance, drop-off, and study effort.",
     )
 
-    st.info(
-        "Course performance comparison will be added here."
+    display = metrics[
+        [
+            "course_id",
+            "learners",
+            "completion_rate",
+            "avg_quiz_score",
+            "dropout_rate",
+            "study_hours",
+        ]
+    ].rename(
+        columns={
+            "course_id": "Course",
+            "learners": "Learners",
+            "completion_rate": "Completion %",
+            "avg_quiz_score": "Avg Quiz %",
+            "dropout_rate": "Drop-off %",
+            "study_hours": "Study Hours",
+        }
+    )
+
+    st.dataframe(
+        display,
+        hide_index=True,
+        use_container_width=True,
     )
 
     st.divider()
 
-    # -----------------------------
-    # KEY INSIGHTS
-    # -----------------------------
-
-    insights = [
-        {
-            "title": "Strong Completion",
-            "message": (
-                "Courses with consistent weekly activity "
-                "show higher completion rates."
-            ),
-            "type": "success",
-        },
-        {
-            "title": "Performance Gap",
-            "message": (
-                "Courses with lower quiz performance "
-                "show increased drop-off."
-            ),
-            "type": "warning",
-        },
+    completion_leader = metrics.loc[
+        metrics["completion_rate"].idxmax()
+    ]
+    quiz_leader = metrics.loc[
+        metrics["avg_quiz_score"].idxmax()
+    ]
+    study_leader = metrics.loc[
+        metrics["study_hours"].idxmax()
     ]
 
     col1, col2 = st.columns([1.6, 1])
@@ -157,24 +209,44 @@ def render_course_performance():
     with col1:
         render_section_header(
             "Course Insights",
-            "Important patterns identified across courses.",
+            "Patterns derived from the current course-level data.",
         )
 
-        for insight in insights:
-            render_insight(
-                insight["title"],
-                insight["message"],
-                insight["type"],
-            )
+        render_insight(
+            "Completion Leader",
+            (
+                f"{completion_leader['course_id']} has the highest "
+                f"completion rate at "
+                f"{completion_leader['completion_rate']:.1f}%."
+            ),
+            "success",
+        )
+
+        render_insight(
+            "Quiz Performance",
+            (
+                f"{quiz_leader['course_id']} has the highest average "
+                f"quiz score at "
+                f"{quiz_leader['avg_quiz_score']:.1f}%."
+            ),
+            "info",
+        )
+
+        render_insight(
+            "Study Activity",
+            (
+                f"{study_leader['course_id']} has the highest recorded "
+                f"study time at "
+                f"{study_leader['study_hours']:.1f} hours."
+            ),
+            "info",
+        )
 
     with col2:
         render_section_header("Top Performing Course")
 
-        top_course = course_data["top_course"]
-
         st.metric(
             "Completion Rate",
-            top_course["completion_rate"],
+            f"{completion_leader['completion_rate']:.1f}%",
         )
-
-        st.caption(top_course["name"])
+        st.caption(str(completion_leader["course_id"]))
