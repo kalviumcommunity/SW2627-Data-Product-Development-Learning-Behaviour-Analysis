@@ -221,9 +221,13 @@ class AnalyticsService:
             quiz_data["score_pct"] = pd.to_numeric(
                 quiz_data["score_pct"], errors="coerce"
             )
-            quiz_data["attempt_number"] = pd.to_numeric(
-                quiz_data["attempt_number"], errors="coerce"
-            )
+            if "attempt_number" in quiz_data.columns:
+                quiz_data["attempt_number"] = pd.to_numeric(
+                    quiz_data["attempt_number"],
+                    errors="coerce",
+                )
+            else:
+                quiz_data["attempt_number"] = pd.NA
             quiz_summary = (
                 quiz_data.groupby(
                     ["student_id", "course_id"],
@@ -309,6 +313,183 @@ class AnalyticsService:
         )
 
 
+    # ============================================================
+    # REPORTS & INSIGHTS
+    # ============================================================
+
+    def report_snapshot(
+        self,
+        dashboard: DashboardData,
+    ) -> dict[str, float | int]:
+        """Return report-level metrics for the selected population."""
+
+        completion = dashboard.raw["completion"]
+
+        if completion.empty:
+            return {
+                "records": 0,
+                "courses": 0,
+                "completion_rate": 0.0,
+                "dropout_rate": 0.0,
+                "average_quiz_score": 0.0,
+                "active_students": 0,
+                "avg_study_time_hours": 0.0,
+            }
+
+        kpis = self.kpis(dashboard)
+        behaviour = self.behaviour_summary(dashboard)
+
+        return {
+            "records": int(len(completion)),
+            "courses": int(
+                completion["course_id"].dropna().nunique()
+            ),
+            "completion_rate": float(
+                kpis.get("completion_rate", 0.0)
+            ),
+            "dropout_rate": float(
+                kpis.get("dropoff_rate", 0.0)
+            ),
+            "average_quiz_score": float(
+                kpis.get("average_quiz_score", 0.0)
+            ),
+            "active_students": int(
+                kpis.get("active_students", 0)
+            ),
+            "avg_study_time_hours": float(
+                behaviour.get(
+                    "avg_study_time_hours",
+                    0.0,
+                )
+            ),
+        }
+
+    def status_distribution(
+        self,
+        dashboard: DashboardData,
+    ) -> pd.DataFrame:
+        """Return learner counts by normalized completion status."""
+
+        completion = dashboard.raw["completion"]
+
+        columns = [
+            "status",
+            "learners",
+            "percentage",
+        ]
+
+        if (
+            completion.empty
+            or "status" not in completion.columns
+        ):
+            return pd.DataFrame(columns=columns)
+
+        statuses = (
+            completion["status"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+            .str.replace(
+                " ",
+                "_",
+                regex=False,
+            )
+        )
+
+        result = (
+            pd.DataFrame(
+                {"status": statuses}
+            )
+            .groupby(
+                "status",
+                dropna=False,
+            )
+            .size()
+            .reset_index(
+                name="learners"
+            )
+        )
+
+        total = int(
+            result["learners"].sum()
+        )
+
+        if total:
+            result["percentage"] = (
+                result["learners"]
+                / total
+                * 100
+            ).round(2)
+        else:
+            result["percentage"] = 0.0
+
+        return (
+            result[columns]
+            .sort_values(
+                "learners",
+                ascending=False,
+            )
+            .reset_index(drop=True)
+        )
+
+    def report_export_data(
+        self,
+        dashboard: DashboardData,
+    ) -> pd.DataFrame:
+        """Return a stable learner-course report export."""
+
+        completion = dashboard.raw[
+            "completion"
+        ].copy()
+
+        columns = [
+            "student_id",
+            "course_id",
+            "status",
+            "completion_pct",
+        ]
+
+        if completion.empty:
+            return pd.DataFrame(
+                columns=columns
+            )
+
+        available = [
+            column
+            for column in columns
+            if column in completion.columns
+        ]
+
+        export_data = completion[
+            available
+        ].copy()
+
+        if "status" in export_data.columns:
+            export_data["status"] = (
+                export_data["status"]
+                .astype("string")
+                .str.strip()
+                .str.lower()
+                .str.replace(
+                    " ",
+                    "_",
+                    regex=False,
+                )
+            )
+
+        if "completion_pct" in export_data.columns:
+            export_data[
+                "completion_pct"
+            ] = pd.to_numeric(
+                export_data[
+                    "completion_pct"
+                ],
+                errors="coerce",
+            ).round(2)
+
+        return export_data.reset_index(
+            drop=True
+        )
 
     # ============================================================
     # COURSE PERFORMANCE
@@ -318,12 +499,7 @@ class AnalyticsService:
         self,
         dashboard: DashboardData,
     ) -> pd.DataFrame:
-        """Build one row per course for Course Performance.
-
-        This method uses only the current course-level data contract:
-        completion status/progress, quiz score, and session duration.
-        It does not require quiz.attempt_number or timestamp fields.
-        """
+        """Return one row per course for Course Performance."""
 
         completion = dashboard.raw["completion"].copy()
         quiz = dashboard.raw["quiz"].copy()
@@ -331,7 +507,7 @@ class AnalyticsService:
 
         self._validate_completion_grain(completion)
 
-        output_columns = [
+        columns = [
             "course_id",
             "learners",
             "completion_rate",
@@ -344,25 +520,37 @@ class AnalyticsService:
         ]
 
         if completion.empty:
-            return pd.DataFrame(columns=output_columns)
+            return pd.DataFrame(columns=columns)
+
+        # Completion is guaranteed to be one row per student-course pair.
+        completion["completion_pct"] = pd.to_numeric(
+            completion.get(
+                "completion_pct",
+                pd.Series(index=completion.index, dtype=float),
+            ),
+            errors="coerce",
+        )
 
         if "status" in completion.columns:
             completion["status_normalized"] = (
                 completion["status"]
-                .astype(str)
+                .astype("string")
                 .str.strip()
                 .str.lower()
+                .str.replace(" ", "_", regex=False)
             )
         else:
-            completion["status_normalized"] = ""
+            completion["status_normalized"] = pd.Series(
+                "",
+                index=completion.index,
+                dtype="string",
+            )
 
-        completion["completion_pct"] = pd.to_numeric(
-            completion.get("completion_pct", 0),
-            errors="coerce",
-        )
-
-        course_metrics = (
-            completion.groupby("course_id", as_index=False)
+        result = (
+            completion.groupby(
+                "course_id",
+                as_index=False,
+            )
             .agg(
                 learners=("student_id", "nunique"),
                 completion_rate=(
@@ -373,12 +561,19 @@ class AnalyticsService:
                     "status_normalized",
                     lambda values: values.eq("dropped").mean() * 100,
                 ),
-                avg_completion_pct=("completion_pct", "mean"),
+                avg_completion_pct=(
+                    "completion_pct",
+                    "mean",
+                ),
             )
         )
 
-        # Quiz score is optional for this view.
-        if {"course_id", "score_pct"}.issubset(quiz.columns):
+        # Quiz metrics are aggregated independently at course grain
+        # before being joined, preventing join multiplication.
+        if {
+            "course_id",
+            "score_pct",
+        }.issubset(quiz.columns):
             quiz_data = quiz.copy()
             quiz_data["score_pct"] = pd.to_numeric(
                 quiz_data["score_pct"],
@@ -386,20 +581,28 @@ class AnalyticsService:
             )
 
             quiz_metrics = (
-                quiz_data.groupby("course_id", as_index=False)
-                .agg(avg_quiz_score=("score_pct", "mean"))
+                quiz_data.groupby(
+                    "course_id",
+                    as_index=False,
+                )
+                .agg(
+                    avg_quiz_score=(
+                        "score_pct",
+                        "mean",
+                    )
+                )
             )
 
-            course_metrics = course_metrics.merge(
+            result = result.merge(
                 quiz_metrics,
                 on="course_id",
                 how="left",
                 validate="one_to_one",
             )
         else:
-            course_metrics["avg_quiz_score"] = 0.0
+            result["avg_quiz_score"] = 0.0
 
-        # Session duration is aggregated at course level.
+        # Session metrics are aggregated at course grain.
         if {
             "course_id",
             "student_id",
@@ -412,11 +615,23 @@ class AnalyticsService:
             )
 
             session_metrics = (
-                session_data.groupby("course_id", as_index=False)
+                session_data.groupby(
+                    "course_id",
+                    as_index=False,
+                )
                 .agg(
-                    total_minutes=("duration_minutes", "sum"),
-                    sessions=("duration_minutes", "size"),
-                    active_students=("student_id", "nunique"),
+                    total_minutes=(
+                        "duration_minutes",
+                        "sum",
+                    ),
+                    sessions=(
+                        "duration_minutes",
+                        "size",
+                    ),
+                    active_students=(
+                        "student_id",
+                        "nunique",
+                    ),
                 )
             )
 
@@ -424,7 +639,7 @@ class AnalyticsService:
                 session_metrics["total_minutes"] / 60
             )
 
-            course_metrics = course_metrics.merge(
+            result = result.merge(
                 session_metrics[
                     [
                         "course_id",
@@ -438,9 +653,9 @@ class AnalyticsService:
                 validate="one_to_one",
             )
         else:
-            course_metrics["study_hours"] = 0.0
-            course_metrics["sessions"] = 0
-            course_metrics["active_students"] = 0
+            result["study_hours"] = 0.0
+            result["sessions"] = 0
+            result["active_students"] = 0
 
         numeric_columns = [
             "learners",
@@ -454,13 +669,13 @@ class AnalyticsService:
         ]
 
         for column in numeric_columns:
-            course_metrics[column] = pd.to_numeric(
-                course_metrics[column],
+            result[column] = pd.to_numeric(
+                result[column],
                 errors="coerce",
             ).fillna(0)
 
         return (
-            course_metrics[output_columns]
+            result[columns]
             .round(
                 {
                     "completion_rate": 2,

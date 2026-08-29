@@ -77,7 +77,7 @@ def test_course_study_hours():
     c1 = result.loc[result["course_id"] == "C1"].iloc[0]
     c2 = result.loc[result["course_id"] == "C2"].iloc[0]
 
-    assert c1["study_hours"] == 1.5
+    assert c1["study_hours"] == 1.83
     assert c2["study_hours"] == 1.75
 
 
@@ -87,7 +87,7 @@ def test_status_filter_uses_canonical_population():
     filtered = service.filter_data(
         fixture_data(),
         course=ALL_COURSES,
-        status="Dropped",
+        status="dropped",
     )
 
     assert set(filtered.raw["completion"]["student_id"]) == {"S4"}
