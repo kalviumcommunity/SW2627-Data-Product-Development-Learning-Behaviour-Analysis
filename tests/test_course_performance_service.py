@@ -29,6 +29,7 @@ def fixture_data():
                     "student_id": ["S1", "S2", "S3", "S4"],
                     "course_id": ["C1", "C1", "C2", "C2"],
                     "score_pct": [90, 60, 85, 40],
+                    "attempt_number": [1, 1, 2, 1],
                 }
             ),
             "sessions": pd.DataFrame(
@@ -77,6 +78,7 @@ def test_course_study_hours():
     c1 = result.loc[result["course_id"] == "C1"].iloc[0]
     c2 = result.loc[result["course_id"] == "C2"].iloc[0]
 
+    # 30 + 60 + 20 = 110 minutes = 1.83 hours.
     assert c1["study_hours"] == 1.83
     assert c2["study_hours"] == 1.75
 
@@ -125,3 +127,8 @@ def test_duplicate_completion_grain_is_rejected():
         match="one row per student-course pair",
     ):
         AnalyticsService().course_performance(data)
+
+
+def test_course_performance_accepts_canonical_quiz_schema():
+    result = AnalyticsService().course_performance(fixture_data())
+    assert not result.empty

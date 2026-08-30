@@ -35,6 +35,7 @@ class AnalyticsService:
         data["quiz"] = clean_quiz(data["quiz"])
         data["sessions"] = clean_sessions(data["sessions"])
         self._validate_completion_grain(data["completion"])
+        self._validate_quiz_schema(data["quiz"])
         return DashboardData(raw=data)
 
     @staticmethod
@@ -54,6 +55,24 @@ class AnalyticsService:
             raise ValueError(
                 "completion data must contain one row per "
                 "student-course pair."
+            )
+
+    @staticmethod
+    def _validate_quiz_schema(quiz: pd.DataFrame) -> None:
+        """Validate the canonical quiz analytics schema."""
+        required = {
+            "student_id",
+            "course_id",
+            "score_pct",
+            "attempt_number",
+        }
+        missing = required.difference(quiz.columns)
+
+        if missing:
+            raise ValueError(
+                "quiz data is missing required columns: "
+                f"{sorted(missing)}. Expected the canonical quiz "
+                "schema produced by the cleaning pipeline."
             )
 
     @staticmethod
@@ -221,13 +240,16 @@ class AnalyticsService:
             quiz_data["score_pct"] = pd.to_numeric(
                 quiz_data["score_pct"], errors="coerce"
             )
-            if "attempt_number" in quiz_data.columns:
-                quiz_data["attempt_number"] = pd.to_numeric(
-                    quiz_data["attempt_number"],
-                    errors="coerce",
+            if "attempt_number" not in quiz_data.columns:
+                raise ValueError(
+                    "quiz data is missing required column: "
+                    "'attempt_number'. Expected the canonical quiz schema."
                 )
-            else:
-                quiz_data["attempt_number"] = pd.NA
+
+            quiz_data["attempt_number"] = pd.to_numeric(
+                quiz_data["attempt_number"],
+                errors="coerce",
+            )
             quiz_summary = (
                 quiz_data.groupby(
                     ["student_id", "course_id"],
@@ -438,10 +460,6 @@ class AnalyticsService:
     ) -> pd.DataFrame:
         """Return a stable learner-course report export."""
 
-        completion = dashboard.raw[
-            "completion"
-        ].copy()
-
         columns = [
             "student_id",
             "course_id",
@@ -449,51 +467,37 @@ class AnalyticsService:
             "completion_pct",
         ]
 
+        completion = dashboard.raw["completion"].copy()
+
         if completion.empty:
-            return pd.DataFrame(
-                columns=columns
-            )
+            return pd.DataFrame(columns=columns)
 
-        available = [
-            column
-            for column in columns
-            if column in completion.columns
-        ]
+        # Reindex guarantees the same CSV schema even if an upstream
+        # optional field is unavailable.
+        export_data = completion.reindex(
+            columns=columns
+        ).copy()
 
-        export_data = completion[
-            available
-        ].copy()
-
-        if "status" in export_data.columns:
-            export_data["status"] = (
-                export_data["status"]
-                .astype("string")
-                .str.strip()
-                .str.lower()
-                .str.replace(
-                    " ",
-                    "_",
-                    regex=False,
-                )
-            )
-
-        if "completion_pct" in export_data.columns:
-            export_data[
-                "completion_pct"
-            ] = pd.to_numeric(
-                export_data[
-                    "completion_pct"
-                ],
-                errors="coerce",
-            ).round(2)
-
-        return export_data.reset_index(
-            drop=True
+        export_data["student_id"] = (
+            export_data["student_id"].astype("string")
         )
+        export_data["course_id"] = (
+            export_data["course_id"].astype("string")
+        )
+        export_data["status"] = (
+            export_data["status"]
+            .astype("string")
+            .str.strip()
+            .str.lower()
+            .str.replace(" ", "_", regex=False)
+        )
+        export_data["completion_pct"] = pd.to_numeric(
+            export_data["completion_pct"],
+            errors="coerce",
+        ).round(2)
 
-    # ============================================================
-    # COURSE PERFORMANCE
-    # ============================================================
+        return export_data.reset_index(drop=True)
+
 
     def course_performance(
         self,
