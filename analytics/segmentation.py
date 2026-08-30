@@ -100,3 +100,33 @@ def segment_learners(df: pd.DataFrame) -> pd.DataFrame:
     return output[
         ["student_id", "course_id", "segment"]
     ].reset_index(drop=True)
+
+def segment_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Return segment counts and percentages."""
+    segmented = segment_learners(df)
+
+    if segmented.empty:
+        return pd.DataFrame(
+            columns=["segment", "student_count", "percentage"]
+        )
+
+    summary = (
+        segmented.groupby("segment", as_index=False)
+        .size()
+        .rename(columns={"size": "student_count"})
+    )
+
+    total = summary["student_count"].sum()
+
+    summary["percentage"] = (
+        summary["student_count"] / total * 100
+    ).round(2)
+
+    return (
+        summary
+        .sort_values(
+            ["student_count", "segment"],
+            ascending=[False, True],
+        )
+        .reset_index(drop=True)
+    )
