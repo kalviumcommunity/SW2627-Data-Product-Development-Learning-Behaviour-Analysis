@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from services.analytics_service import AnalyticsService
+from app.services.analytics_service import AnalyticsService
 
 
 def _write_dataset(path: Path, filename: str, content: str) -> None:
