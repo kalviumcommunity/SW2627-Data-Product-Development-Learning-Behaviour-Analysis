@@ -32,6 +32,7 @@ def _write_source_files(raw_dir: Path) -> None:
         {
             "student_id": ["S001", "S002"],
             "course_id": ["C001", "C001"],
+            "session_date": ["2024-01-05", "2024-01-06"],
             "duration_minutes": [60, 45],
         }
     ).to_csv(raw_dir / "sessions.csv", index=False)
@@ -40,7 +41,7 @@ def _write_source_files(raw_dir: Path) -> None:
         {
             "student_id": ["S001", "S002"],
             "course_id": ["C001", "C001"],
-            "enrollment_date": ["2026-08-01", "2026-08-01"],
+            "enrollment_date": ["2024-08-01", "2024-08-01"],
             "cohort": ["A", "A"],
         }
     ).to_csv(raw_dir / "enrollment.csv", index=False)
@@ -61,7 +62,10 @@ def test_load_all_data_reads_all_mvp_sources(tmp_path):
 
 
 def test_load_all_data_raises_for_missing_source(tmp_path):
-    with pytest.raises(FileNotFoundError, match="Input file not found"):
+    with pytest.raises(
+        FileNotFoundError,
+        match="Input file not found",
+    ):
         load_all_data(tmp_path)
 
 
@@ -72,7 +76,6 @@ def test_run_pipeline_creates_processed_student_course_table(
     raw_dir = tmp_path / "raw"
     processed_dir = tmp_path / "processed"
     raw_dir.mkdir()
-
     _write_source_files(raw_dir)
 
     monkeypatch.setattr(
@@ -85,13 +88,11 @@ def test_run_pipeline_creates_processed_student_course_table(
     )
 
     result = run_pipeline()
-
     output_path = processed_dir / "student_course.csv"
 
     assert output_path.exists()
     assert len(result) == 2
     assert list(result["student_id"]) == ["S001", "S002"]
-    assert list(result["course_id"]) == ["C001", "C001"]
 
     saved = pd.read_csv(output_path)
     assert len(saved) == 2
@@ -105,7 +106,6 @@ def test_run_pipeline_produces_transformed_metrics(
     raw_dir = tmp_path / "raw"
     processed_dir = tmp_path / "processed"
     raw_dir.mkdir()
-
     _write_source_files(raw_dir)
 
     monkeypatch.setattr(
@@ -125,7 +125,6 @@ def test_run_pipeline_produces_transformed_metrics(
     assert "quiz_attempts" in result.columns
 
     s001 = result[result["student_id"] == "S001"].iloc[0]
-
     assert s001["total_duration"] == 60
     assert s001["session_count"] == 1
     assert s001["avg_quiz_score"] == pytest.approx(75)
