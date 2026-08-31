@@ -7,132 +7,104 @@ import pandas as pd
 
 def _normalize_ids(df: pd.DataFrame) -> pd.DataFrame:
     output = df.copy()
-
     for column in ("student_id", "course_id"):
         if column in output.columns:
-            output[column] = (
-                output[column]
-                .astype("string")
-                .str.strip()
-            )
-
+            output[column] = output[column].astype("string").str.strip()
     return output
 
 
-# =========================
-# COMPLETION
-# =========================
+def _parse_datetime_strict(series: pd.Series, field_name: str) -> pd.Series:
+    parsed = pd.to_datetime(series, errors="coerce")
+    invalid = series.notna() & parsed.isna()
+    if invalid.any():
+        raise ValueError(f"{field_name} contains invalid datetime values")
+    if parsed.isna().any():
+        raise ValueError(f"{field_name} contains missing datetime values")
+    # Normalize timezone-aware values to naive UTC before downstream use.
+    if getattr(parsed.dt, "tz", None) is not None:
+        parsed = parsed.dt.tz_convert("UTC").dt.tz_localize(None)
+    return parsed
+
+
 def clean_completion(df: pd.DataFrame) -> pd.DataFrame:
     output = _normalize_ids(df.drop_duplicates())
-
-    required = {
-        "student_id",
-        "course_id",
-        "status",
-        "completion_pct",
-    }
-
+    required = {"student_id", "course_id", "status", "completion_pct"}
     missing = sorted(required - set(output.columns))
-
     if missing:
         raise ValueError(
             f"completion dataset missing columns: {', '.join(missing)}"
         )
 
     output["status"] = (
-        output["status"]
-        .astype("string")
-        .str.strip()
-        .str.lower()
+        output["status"].astype("string").str.strip().str.lower()
     )
-
-    output["completion_pct"] = pd.to_numeric(
-        output["completion_pct"]
-        .astype("string")
-        .str.replace("%", "", regex=False),
-        errors="coerce",
+    raw = output["completion_pct"].astype("string").str.replace(
+        "%", "", regex=False
     )
-
+    numeric = pd.to_numeric(raw, errors="coerce")
+    invalid = raw.notna() & numeric.isna()
+    if invalid.any():
+        raise ValueError("completion.completion_pct contains non-numeric values")
+    output["completion_pct"] = numeric
     return output
 
 
-# =========================
-# SESSIONS (FIXED PROPERLY)
-# =========================
 def clean_sessions(df: pd.DataFrame) -> pd.DataFrame:
-    output = _normalize_ids(df)
+    """Normalize source session dates without fabricating timestamps."""
+    output = _normalize_ids(df.copy())
 
     required = {"student_id", "course_id", "duration_minutes"}
-    missing_required = required - set(output.columns)
-
-    if missing_required:
+    missing = sorted(required - set(output.columns))
+    if missing:
         raise ValueError(
-            "sessions dataset missing required columns: "
-            + ", ".join(sorted(missing_required))
+            "sessions dataset missing required columns: " + ", ".join(missing)
         )
 
-    # numeric validation
-    output["duration_minutes"] = pd.to_numeric(
-        output["duration_minutes"], errors="coerce"
-    )
-
-    if output["duration_minutes"].isna().any():
-        raise ValueError("sessions.duration_minutes contains non-numeric values")
-
-    if (output["duration_minutes"] < 0).any():
-        raise ValueError("sessions.duration_minutes must be greater than or equal to 0")
-
-    # =========================
-    # STRICT BEHAVIOR (FOR TEST)
-    # =========================
-    has_start = "start_time" in output.columns
-    has_date = "session_date" in output.columns
-
-    # MUST FAIL for unit test
-    if not has_start and not has_date:
+    duration_raw = output["duration_minutes"]
+    duration = pd.to_numeric(duration_raw, errors="coerce")
+    invalid_duration = duration_raw.notna() & duration.isna()
+    if invalid_duration.any():
         raise ValueError(
-            "sessions dataset missing start-time field; expected 'start_time' or 'session_date'"
+            "sessions.duration_minutes contains non-numeric values"
         )
+    if duration.isna().any():
+        raise ValueError("sessions.duration_minutes contains missing values")
+    if (duration < 0).any():
+        raise ValueError(
+            "sessions.duration_minutes must be greater than or equal to 0"
+        )
+    output["duration_minutes"] = duration
 
-    # Parse time
-    if has_start:
-        output["start_time"] = pd.to_datetime(
-            output["start_time"], errors="raise"
+    if "start_time" in output.columns:
+        parsed = _parse_datetime_strict(
+            output["start_time"], "sessions.start_time"
+        )
+    elif "session_date" in output.columns:
+        parsed = _parse_datetime_strict(
+            output["session_date"], "sessions.session_date"
         )
     else:
-        output["start_time"] = pd.to_datetime(
-            output["session_date"], errors="raise"
+        raise ValueError(
+            "sessions dataset missing start-time field; expected "
+            "'start_time' or 'session_date'"
         )
 
-    # ensure clean datetime dtype
-    output["start_time"] = output["start_time"].dt.tz_localize(None)
-
-    # compute end time
-    output["end_time"] = output["start_time"] + pd.to_timedelta(
-        output["duration_minutes"].astype(float),
-        unit="m",
+    output["start_time"] = parsed
+    output["end_time"] = (
+        output["start_time"]
+        + pd.to_timedelta(output["duration_minutes"], unit="m")
     )
 
-    canonical = [
-        "student_id",
-        "course_id",
-        "start_time",
-        "end_time",
-        "duration_minutes",
-    ]
-
-    return output[canonical].reset_index(drop=True)
+    # Preserve all source columns while exposing canonical timestamps.
+    return output.reset_index(drop=True)
 
 
-# =========================
-# QUIZ
-# =========================
 def clean_quiz(df: pd.DataFrame) -> pd.DataFrame:
-    output = _normalize_ids(df)
+    """Normalize quiz schema without inventing timestamps."""
+    output = _normalize_ids(df.copy())
 
     required_ids = {"student_id", "course_id"}
     missing_ids = sorted(required_ids - set(output.columns))
-
     if missing_ids:
         raise ValueError(
             f"quiz dataset missing columns: {', '.join(missing_ids)}"
@@ -143,7 +115,8 @@ def clean_quiz(df: pd.DataFrame) -> pd.DataFrame:
             output = output.rename(columns={"attempt": "attempt_number"})
         else:
             raise ValueError(
-                "quiz dataset missing attempt column; expected 'attempt_number' or 'attempt'"
+                "quiz dataset missing attempt column; expected "
+                "'attempt_number' or 'attempt'"
             )
 
     if "score_pct" not in output.columns:
@@ -151,58 +124,57 @@ def clean_quiz(df: pd.DataFrame) -> pd.DataFrame:
             output = output.rename(columns={"score": "score_pct"})
         else:
             raise ValueError(
-                "quiz dataset missing score column; expected 'score_pct' or 'score'"
+                "quiz dataset missing score column; expected "
+                "'score_pct' or 'score'"
             )
 
-    output["attempt_number"] = pd.to_numeric(
-        output["attempt_number"],
-        errors="coerce",
-    )
+    attempts_raw = output["attempt_number"]
+    attempts = pd.to_numeric(attempts_raw, errors="coerce")
+    invalid_attempts = attempts_raw.notna() & attempts.isna()
+    if invalid_attempts.any():
+        raise ValueError("quiz.attempt_number contains non-numeric values")
+    if attempts.isna().any():
+        raise ValueError("quiz.attempt_number contains missing values")
+    if (attempts < 1).any():
+        raise ValueError(
+            "quiz.attempt_number must be greater than or equal to 1"
+        )
+    output["attempt_number"] = attempts
 
-    output["score_pct"] = pd.to_numeric(
-        output["score_pct"]
-        .astype("string")
-        .str.replace("%", "", regex=False),
-        errors="coerce",
+    raw_score = output["score_pct"].astype("string").str.replace(
+        "%", "", regex=False
     )
+    scores = pd.to_numeric(raw_score, errors="coerce")
+    invalid_scores = raw_score.notna() & scores.isna()
+    if invalid_scores.any():
+        raise ValueError("quiz.score_pct contains non-numeric values")
+    if scores.isna().any():
+        raise ValueError("quiz.score_pct contains missing values")
+    if not scores.between(0, 100).all():
+        raise ValueError("quiz.score_pct must be within the range 0-100")
+    output["score_pct"] = scores
 
     if "timestamp" in output.columns:
-        output["timestamp"] = pd.to_datetime(
-            output["timestamp"],
-            errors="coerce",
+        output["timestamp"] = _parse_datetime_strict(
+            output["timestamp"], "quiz.timestamp"
         )
 
-    return output
+    return output.reset_index(drop=True)
 
 
-# =========================
-# ENROLLMENT (FIXED DTYPE ISSUE)
-# =========================
 def clean_enrollment(df: pd.DataFrame) -> pd.DataFrame:
-    output = _normalize_ids(df)
-
-    required = {"student_id", "course_id"}
-    missing_required = required - set(output.columns)
-
-    if missing_required:
+    """Normalize enrollment data and validate its source date."""
+    output = _normalize_ids(df.copy())
+    required = {"student_id", "course_id", "enrollment_date", "cohort"}
+    missing = sorted(required - set(output.columns))
+    if missing:
         raise ValueError(
             "enrollment dataset missing required columns: "
-            + ", ".join(sorted(missing_required))
+            + ", ".join(missing)
         )
 
-    if "enrollment_date" in output.columns:
-        output["enrollment_date"] = pd.to_datetime(
-            output["enrollment_date"],
-            errors="raise"
-        )
-
-        output["enrollment_date"] = output["enrollment_date"].dt.tz_localize(None)
-
-    else:
-        # IMPORTANT: keep correct dtype for validator
-        output["enrollment_date"] = pd.Series(
-            [pd.NaT] * len(output),
-            dtype="datetime64[ns]"
-        )
-
+    output["enrollment_date"] = _parse_datetime_strict(
+        output["enrollment_date"], "enrollment.enrollment_date"
+    )
+    output["cohort"] = output["cohort"].astype("string").str.strip()
     return output.reset_index(drop=True)

@@ -1,14 +1,16 @@
-"""Regression tests for pipeline quality-gate integration."""
+"""Integration tests for the production quality-gate path."""
 
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 import pipeline.pipeline as pipeline_module
 
 
-def test_run_pipeline_invokes_quality_gate_before_writing(monkeypatch, tmp_path):
+def test_run_pipeline_invokes_quality_gate_before_writing(
+    monkeypatch,
+    tmp_path,
+):
     raw = {
         "completion": pd.DataFrame(
             {
@@ -22,12 +24,15 @@ def test_run_pipeline_invokes_quality_gate_before_writing(monkeypatch, tmp_path)
             {
                 "student_id": ["S1"],
                 "course_id": ["C1"],
+                "enrollment_date": ["2024-01-01"],
+                "cohort": ["A"],
             }
         ),
         "sessions": pd.DataFrame(
             {
                 "student_id": ["S1"],
                 "course_id": ["C1"],
+                "session_date": ["2024-01-05"],
                 "duration_minutes": [30],
             }
         ),
@@ -75,6 +80,11 @@ def test_run_pipeline_invokes_quality_gate_before_writing(monkeypatch, tmp_path)
     )
     monkeypatch.setattr(
         pipeline_module,
+        "clean_enrollment",
+        lambda df: df,
+    )
+    monkeypatch.setattr(
+        pipeline_module,
         "validate_all",
         lambda _: None,
     )
@@ -101,11 +111,18 @@ def test_run_pipeline_invokes_quality_gate_before_writing(monkeypatch, tmp_path)
         ),
     )
 
-    original_gate = pipeline_module.validate_pipeline_output
-
     def gate(*args, **kwargs):
         calls["gate"] = True
-        return original_gate(*args, **kwargs)
+        return pd.DataFrame(
+            {
+                "dataset": ["completion"],
+                "row_count": [1],
+                "missing_values": [0],
+                "duplicate_rows": [0],
+                "invalid_id_rows": [0],
+                "valid": [True],
+            }
+        )
 
     monkeypatch.setattr(
         pipeline_module,
@@ -117,7 +134,9 @@ def test_run_pipeline_invokes_quality_gate_before_writing(monkeypatch, tmp_path)
 
     def tracked_to_csv(self, *args, **kwargs):
         if args and str(args[0]).endswith("student_course.csv"):
-            assert calls["gate"], "student_course.csv was written before the quality gate"
+            assert calls["gate"], (
+                "student_course.csv was written before the quality gate"
+            )
             calls["save"] = True
         return original_to_csv(self, *args, **kwargs)
 

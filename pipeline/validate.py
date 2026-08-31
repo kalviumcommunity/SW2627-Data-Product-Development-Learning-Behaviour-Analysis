@@ -7,28 +7,16 @@ import pandas as pd
 
 REQUIRED_SCHEMAS = {
     "completion": [
-        "student_id",
-        "course_id",
-        "completion_pct",
-        "status",
+        "student_id", "course_id", "completion_pct", "status"
     ],
     "quiz": [
-        "student_id",
-        "course_id",
-        "attempt_number",
-        "score_pct",
+        "student_id", "course_id", "attempt_number", "score_pct"
     ],
     "sessions": [
-        "student_id",
-        "course_id",
-        "duration_minutes",
-        "start_time",
+        "student_id", "course_id", "duration_minutes", "start_time"
     ],
     "enrollment": [
-        "student_id",
-        "course_id",
-        "enrollment_date",
-        "cohort",
+        "student_id", "course_id", "enrollment_date", "cohort"
     ],
 }
 
@@ -51,65 +39,32 @@ def validate_columns(
     required_cols: list[str],
     dataset_name: str,
 ) -> None:
-    """Raise when required columns are missing."""
-    missing = [
-        column
-        for column in required_cols
-        if column not in df.columns
-    ]
-
+    missing = [column for column in required_cols if column not in df.columns]
     if missing:
-        raise ValueError(
-            f"{dataset_name} missing columns: {missing}"
-        )
+        raise ValueError(f"{dataset_name} missing columns: {missing}")
 
 
-def validate_dtypes(
-    df: pd.DataFrame,
-    dataset_name: str,
-) -> None:
-    """Validate numeric and datetime columns where present."""
+def validate_dtypes(df: pd.DataFrame, dataset_name: str) -> None:
     for column in NUMERIC_COLUMNS.get(dataset_name, []):
-        if (
-            column in df.columns
-            and not pd.api.types.is_numeric_dtype(df[column])
-        ):
-            raise TypeError(
-                f"{dataset_name}.{column} must be numeric"
-            )
+        if column in df.columns and not pd.api.types.is_numeric_dtype(df[column]):
+            raise TypeError(f"{dataset_name}.{column} must be numeric")
 
     for column in DATETIME_COLUMNS.get(dataset_name, []):
-        if column not in df.columns:
-            continue
-
-        if not pd.api.types.is_datetime64_any_dtype(df[column]):
-            raise TypeError(
-                f"{dataset_name}.{column} must be datetime-like"
-            )
+        if column in df.columns and not pd.api.types.is_datetime64_any_dtype(df[column]):
+            raise TypeError(f"{dataset_name}.{column} must be datetime-like")
 
 
-def validate_all(
-    data_dict: dict[str, pd.DataFrame],
-) -> None:
-    """Validate the standard pipeline datasets after cleaning."""
-    unknown = sorted(
-        set(data_dict) - set(REQUIRED_SCHEMAS)
-    )
-
+def validate_all(data_dict: dict[str, pd.DataFrame]) -> None:
+    unknown = sorted(set(data_dict) - set(REQUIRED_SCHEMAS))
     if unknown:
-        raise ValueError(
-            f"Unknown datasets: {', '.join(unknown)}"
-        )
+        raise ValueError(f"Unknown datasets: {', '.join(unknown)}")
 
     for name, df in data_dict.items():
-        validate_columns(
-            df,
-            REQUIRED_SCHEMAS[name],
-            name,
-        )
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"{name} must be a pandas DataFrame")
+
+        validate_columns(df, REQUIRED_SCHEMAS[name], name)
         validate_dtypes(df, name)
 
         if df.duplicated().any():
-            raise ValueError(
-                f"{name} contains duplicate rows"
-            )
+            raise ValueError(f"{name} contains duplicate rows")
