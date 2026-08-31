@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "row_count": 216,
-  "quality_report": "data/processed/quality_report.csv",
-  "student_course": "data/processed/student_course.csv",
+  "row_count": 206,
+  "quality_report": "data\\processed\\quality_report.csv",
+  "student_course": "data\\processed\\student_course.csv",
   "schema": {
     "version": "1.0",
     "datasets": {
