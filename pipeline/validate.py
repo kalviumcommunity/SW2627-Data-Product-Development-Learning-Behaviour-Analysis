@@ -4,32 +4,12 @@ from __future__ import annotations
 
 import pandas as pd
 
+from pipeline.schema import SOURCE_SCHEMAS
+
 
 REQUIRED_SCHEMAS = {
-    "completion": (
-        "student_id",
-        "course_id",
-        "completion_pct",
-        "status",
-    ),
-    "quiz": (
-        "student_id",
-        "course_id",
-        "attempt_number",
-        "score_pct",
-    ),
-    "sessions": (
-        "student_id",
-        "course_id",
-        "duration_minutes",
-        "start_time",
-    ),
-    "enrollment": (
-        "student_id",
-        "course_id",
-        "enrollment_date",
-        "cohort",
-    ),
+    name: schema.required_columns
+    for name, schema in SOURCE_SCHEMAS.items()
 }
 
 NUMERIC_COLUMNS = {
@@ -71,7 +51,7 @@ def validate_dtypes(
                 f"{dataset_name}.{column} must be numeric"
             )
 
-        if not pd.Series(df[column]).map(pd.notna).all():
+        if df[column].isna().any():
             raise ValueError(
                 f"{dataset_name}.{column} contains missing values"
             )
@@ -79,6 +59,7 @@ def validate_dtypes(
     for column in DATETIME_COLUMNS.get(dataset_name, ()):
         if column not in df.columns:
             continue
+
         if not pd.api.types.is_datetime64_any_dtype(df[column]):
             raise TypeError(
                 f"{dataset_name}.{column} must be datetime-like"
@@ -96,6 +77,15 @@ def validate_all(
             f"Unknown datasets: {', '.join(unknown)}"
         )
 
+    missing = sorted(
+        set(REQUIRED_SCHEMAS) - set(data_dict)
+    )
+    if missing:
+        raise ValueError(
+            "Missing required datasets: "
+            + ", ".join(missing)
+        )
+
     for name, df in data_dict.items():
         if not isinstance(df, pd.DataFrame):
             raise TypeError(
@@ -111,3 +101,8 @@ def validate_all(
             df,
             name,
         )
+
+        if df.duplicated().any():
+            raise ValueError(
+                f"{name} contains duplicate rows"
+            )
