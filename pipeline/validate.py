@@ -1,36 +1,11 @@
-"""Canonical source schema and dtype validation."""
+"""Validation for canonical pipeline source schemas and dtypes."""
 
 from __future__ import annotations
 
 import pandas as pd
 
+from pipeline.quality import REQUIRED_SCHEMAS
 
-REQUIRED_SCHEMAS = {
-    "completion": (
-        "student_id",
-        "course_id",
-        "completion_pct",
-        "status",
-    ),
-    "quiz": (
-        "student_id",
-        "course_id",
-        "attempt_number",
-        "score_pct",
-    ),
-    "sessions": (
-        "student_id",
-        "course_id",
-        "duration_minutes",
-        "start_time",
-    ),
-    "enrollment": (
-        "student_id",
-        "course_id",
-        "enrollment_date",
-        "cohort",
-    ),
-}
 
 NUMERIC_COLUMNS = {
     "completion": ("completion_pct",),
@@ -70,8 +45,7 @@ def validate_dtypes(
             raise TypeError(
                 f"{dataset_name}.{column} must be numeric"
             )
-
-        if not pd.Series(df[column]).map(pd.notna).all():
+        if df[column].isna().any():
             raise ValueError(
                 f"{dataset_name}.{column} contains missing values"
             )
@@ -88,12 +62,22 @@ def validate_dtypes(
 def validate_all(
     data_dict: dict[str, pd.DataFrame],
 ) -> None:
-    unknown = sorted(
+    missing_datasets = sorted(
+        set(REQUIRED_SCHEMAS) - set(data_dict)
+    )
+    if missing_datasets:
+        raise ValueError(
+            "Missing required datasets: "
+            + ", ".join(missing_datasets)
+        )
+
+    unknown_datasets = sorted(
         set(data_dict) - set(REQUIRED_SCHEMAS)
     )
-    if unknown:
+    if unknown_datasets:
         raise ValueError(
-            f"Unknown datasets: {', '.join(unknown)}"
+            "Unknown datasets: "
+            + ", ".join(unknown_datasets)
         )
 
     for name, df in data_dict.items():
@@ -107,7 +91,9 @@ def validate_all(
             REQUIRED_SCHEMAS[name],
             name,
         )
-        validate_dtypes(
-            df,
-            name,
-        )
+        validate_dtypes(df, name)
+
+        if df.duplicated().any():
+            raise ValueError(
+                f"{name} contains duplicate rows"
+            )

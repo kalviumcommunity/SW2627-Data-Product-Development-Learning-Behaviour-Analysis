@@ -7,11 +7,9 @@ from collections.abc import Mapping
 import numpy as np
 import pandas as pd
 
+
 KEYS = ("student_id", "course_id")
 
-# These are production schemas, but generate_quality_report intentionally
-# remains an aggregate quality-report API. Strict schema/domain enforcement
-# happens in validate_all() and the production quality gate.
 REQUIRED_SCHEMAS = {
     "completion": (
         "student_id",
@@ -46,62 +44,65 @@ def _invalid_id_rows(df: pd.DataFrame) -> int:
     for column in KEYS:
         if column not in df.columns:
             continue
-
         invalid |= df[column].isna()
-        values = df[column].astype("string")
-        invalid |= values.str.strip().eq("").fillna(False)
+        invalid |= (
+            df[column]
+            .astype("string")
+            .str.strip()
+            .eq("")
+            .fillna(False)
+        )
 
     return int(invalid.sum()) if len(df) else 0
 
 
 def _domain_error(df: pd.DataFrame, dataset: str) -> bool:
-    """Check known value-domain rules when the relevant columns exist."""
     if dataset == "completion" and "completion_pct" in df.columns:
         values = pd.to_numeric(df["completion_pct"], errors="coerce")
-        numeric = values.to_numpy(dtype=float)
+        numbers = values.to_numpy(dtype=float)
         return bool(
             values.isna().any()
-            or ~np.isfinite(numeric).all()
+            or not np.isfinite(numbers).all()
             or not values.between(0, 100).all()
         )
 
     if dataset == "quiz":
         if "attempt_number" in df.columns:
-            attempts = pd.to_numeric(
+            values = pd.to_numeric(
                 df["attempt_number"],
                 errors="coerce",
             )
-            attempt_values = attempts.to_numpy(dtype=float)
+            numbers = values.to_numpy(dtype=float)
             if (
-                attempts.isna().any()
-                or not np.isfinite(attempt_values).all()
-                or not attempts.ge(1).all()
+                values.isna().any()
+                or not np.isfinite(numbers).all()
+                or not values.ge(1).all()
             ):
                 return True
 
         if "score_pct" in df.columns:
-            scores = pd.to_numeric(
+            values = pd.to_numeric(
                 df["score_pct"],
                 errors="coerce",
             )
-            score_values = scores.to_numpy(dtype=float)
+            numbers = values.to_numpy(dtype=float)
             if (
-                scores.isna().any()
-                or not np.isfinite(score_values).all()
-                or not scores.between(0, 100).all()
+                values.isna().any()
+                or not np.isfinite(numbers).all()
+                or not values.between(0, 100).all()
             ):
                 return True
 
     if dataset == "sessions" and "duration_minutes" in df.columns:
-        durations = pd.to_numeric(
+        values = pd.to_numeric(
             df["duration_minutes"],
             errors="coerce",
         )
-        duration_values = durations.to_numpy(dtype=float)
+        numbers = values.to_numpy(dtype=float)
         return bool(
-            durations.isna().any()
-            or not np.isfinite(duration_values).all()
-            or not durations.ge(0).all()
+            values.isna().any()
+            or not np.isfinite(numbers).all()
+            or not values.ge(0).all()
         )
 
     return False
@@ -110,13 +111,8 @@ def _domain_error(df: pd.DataFrame, dataset: str) -> bool:
 def generate_quality_report(
     data: Mapping[str, pd.DataFrame],
 ) -> pd.DataFrame:
-    """Return aggregate quality metrics for supplied datasets.
-
-    This function deliberately reports the data it is given. It does not
-    require every dataset to contain the complete production schema because
-    it is also used by focused callers to inspect subsets of columns.
-    """
-    rows = []
+    """Return the legacy, stable quality-report schema."""
+    rows: list[dict[str, object]] = []
 
     for name, df in data.items():
         if not isinstance(df, pd.DataFrame):
@@ -161,7 +157,7 @@ def generate_quality_report(
 def validate_student_course_table(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Validate the final one-row-per-student-course analytics handoff."""
+    """Validate the final one-row-per-student-course analytics table."""
     if not isinstance(df, pd.DataFrame):
         raise TypeError(
             "student_course must be a pandas DataFrame"
@@ -184,15 +180,15 @@ def validate_student_course_table(
             "with missing or blank identifiers"
         )
 
-    duplicate_keys = int(
+    duplicates = int(
         df.duplicated(
             subset=list(KEYS),
             keep=False,
         ).sum()
     )
-    if duplicate_keys:
+    if duplicates:
         raise ValueError(
-            f"student_course contains {duplicate_keys} rows "
+            f"student_course contains {duplicates} rows "
             "with duplicate student-course keys"
         )
 
@@ -200,9 +196,8 @@ def validate_student_course_table(
         if column not in df.columns:
             continue
 
-        original = df[column]
         values = pd.to_numeric(
-            original,
+            df[column],
             errors="coerce",
         )
         numeric = values.to_numpy(dtype=float)
@@ -213,8 +208,6 @@ def validate_student_course_table(
             | ~np.isfinite(numeric)
         )
 
-        # Numeric conversion failures are intentionally identified as invalid
-        # metric values rather than allowed to silently pass downstream.
         if invalid.any():
             raise ValueError(
                 f"student_course.{column} contains "

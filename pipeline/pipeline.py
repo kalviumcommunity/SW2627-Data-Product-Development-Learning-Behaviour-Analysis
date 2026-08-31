@@ -1,4 +1,4 @@
-"""End-to-end LearnLens data pipeline."""
+"""End-to-end LearnLens production data pipeline."""
 
 from __future__ import annotations
 
@@ -8,41 +8,67 @@ from pipeline.clean import (
     clean_quiz,
     clean_sessions,
 )
-from pipeline.config import BASE_DATA_PATH, PROCESSED_PATH
+from pipeline.config import (
+    BASE_DATA_PATH,
+    PROCESSED_PATH,
+)
 from pipeline.ingest import load_all_data
 from pipeline.join import build_student_course_table
 from pipeline.logger import logger
 from pipeline.quality_gate import (
     validate_pipeline_output,
+    write_pipeline_manifest,
     write_quality_report,
 )
-from pipeline.transform import transform_quiz, transform_sessions
+from pipeline.transform import (
+    transform_quiz,
+    transform_sessions,
+)
 from pipeline.validate import validate_all
 
 
 def run_pipeline():
-    """Load, clean, validate, transform, join, gate, and persist data."""
+    """Load, clean, validate, transform, join, gate, and persist."""
     try:
-        logger.info("Loading source data from %s", BASE_DATA_PATH)
-        data = load_all_data(BASE_DATA_PATH)
+        logger.info(
+            "Loading source data from %s",
+            BASE_DATA_PATH,
+        )
+        data = load_all_data(
+            BASE_DATA_PATH
+        )
 
         logger.info("Cleaning source data")
-        data["completion"] = clean_completion(data["completion"])
-        data["enrollment"] = clean_enrollment(data["enrollment"])
-        data["sessions"] = clean_sessions(data["sessions"])
-        data["quiz"] = clean_quiz(data["quiz"])
+        data["completion"] = clean_completion(
+            data["completion"]
+        )
+        data["enrollment"] = clean_enrollment(
+            data["enrollment"]
+        )
+        data["sessions"] = clean_sessions(
+            data["sessions"]
+        )
+        data["quiz"] = clean_quiz(
+            data["quiz"]
+        )
 
         logger.info("Validating cleaned source data")
         validate_all(data)
 
         logger.info("Transforming event datasets")
-        data["sessions"] = transform_sessions(data["sessions"])
-        data["quiz"] = transform_quiz(data["quiz"])
+        data["sessions"] = transform_sessions(
+            data["sessions"]
+        )
+        data["quiz"] = transform_quiz(
+            data["quiz"]
+        )
 
         logger.info("Building student-course table")
-        student_course = build_student_course_table(data)
+        student_course = build_student_course_table(
+            data
+        )
 
-        logger.info("Running production data-quality gate")
+        logger.info("Running production quality gate")
         quality_report = validate_pipeline_output(
             {
                 "completion": data["completion"],
@@ -54,25 +80,35 @@ def run_pipeline():
             require_all_sources=True,
         )
 
-        quality_report_path = PROCESSED_PATH / "quality_report.csv"
+        quality_report_path = (
+            PROCESSED_PATH
+            / "quality_report.csv"
+        )
         write_quality_report(
             quality_report,
             quality_report_path,
         )
 
-        output_path = PROCESSED_PATH / "student_course.csv"
-        output_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
+        output_path = (
+            PROCESSED_PATH
+            / "student_course.csv"
         )
 
-        logger.info(
-            "Saving processed data to %s",
+        # Reuse the atomic writer used by the quality report by importing
+        # the helper locally to avoid expanding the public API.
+        from pipeline.quality_gate import _atomic_csv
+
+        _atomic_csv(
+            student_course,
             output_path,
         )
-        student_course.to_csv(
-            output_path,
-            index=False,
+
+        write_pipeline_manifest(
+            PROCESSED_PATH
+            / "pipeline_manifest.json",
+            row_count=len(student_course),
+            quality_report_path=quality_report_path,
+            student_course_path=output_path,
         )
 
         logger.info(

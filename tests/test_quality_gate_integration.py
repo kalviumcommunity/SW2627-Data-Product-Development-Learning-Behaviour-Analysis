@@ -140,20 +140,28 @@ def test_run_pipeline_invokes_quality_gate_before_writing(
 
     def tracked_to_csv(self, *args, **kwargs):
         target = args[0] if args else kwargs.get("path_or_buf")
-        if target is not None and str(target).endswith(
-            "student_course.csv"
+
+        if target is not None:
+            target_name = str(target)
+
+        # The production pipeline writes to a temporary file first,
+        # then atomically renames it to student_course.csv.
+        if (
+            "student_course.csv.tmp" in target_name
+            or ".student_course.csv." in target_name
         ):
             assert calls["gate"], (
                 "student_course.csv was written before the quality gate"
             )
             calls["save"] = True
+
         return original_to_csv(self, *args, **kwargs)
 
     monkeypatch.setattr(
         pd.DataFrame,
         "to_csv",
         tracked_to_csv,
-    )
+)
 
     result = pipeline_module.run_pipeline()
 
