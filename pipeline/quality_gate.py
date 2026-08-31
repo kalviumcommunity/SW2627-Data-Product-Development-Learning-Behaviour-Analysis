@@ -1,8 +1,4 @@
-"""Production data-quality gate for pipeline outputs.
-
-This module is the enforcement boundary around the canonical validators in
-``pipeline.quality``. It does not duplicate data-quality rules.
-"""
+"""Production quality-gate enforcement for pipeline outputs."""
 
 from __future__ import annotations
 
@@ -11,30 +7,57 @@ from pathlib import Path
 
 import pandas as pd
 
-from pipeline.quality import generate_quality_report, validate_student_course_table
+from pipeline.quality import (
+    generate_quality_report,
+    validate_student_course_table,
+)
+
+PRODUCTION_SOURCES = frozenset(
+    {"completion", "enrollment", "sessions", "quiz"}
+)
 
 
 def validate_pipeline_output(
     source_datasets: Mapping[str, pd.DataFrame],
     student_course_df: pd.DataFrame,
+    *,
+    require_all_sources: bool = False,
 ) -> pd.DataFrame:
-    """Validate source datasets and the final student-course output.
+    """Validate supplied sources and the final analytics handoff.
 
-    Returns the canonical source-dataset quality report.
-
-    Raises:
-        TypeError: for invalid input types.
-        ValueError: when any source dataset or the final student-course
-            analytics handoff fails its canonical quality checks.
+    ``require_all_sources=True`` is reserved for the real production
+    pipeline. Focused callers can validate a subset without being forced to
+    construct unrelated datasets.
     """
     if not isinstance(source_datasets, Mapping):
         raise TypeError(
-            "source_datasets must be a mapping of dataset names to pandas DataFrames"
+            "source_datasets must be a mapping of dataset names "
+            "to pandas DataFrames"
         )
+
+    for name, frame in source_datasets.items():
+        if not isinstance(frame, pd.DataFrame):
+            raise TypeError(
+                f"{name} must be a pandas DataFrame"
+            )
+
+    if require_all_sources:
+        missing_sources = sorted(
+            PRODUCTION_SOURCES - set(source_datasets)
+        )
+        if missing_sources:
+            raise ValueError(
+                "data-quality checks failed: missing source "
+                "dataset(s): " + ", ".join(missing_sources)
+            )
 
     report = generate_quality_report(source_datasets)
 
-    invalid_datasets = report.loc[~report["valid"], "dataset"].astype(str).tolist()
+    invalid_datasets = (
+        report.loc[~report["valid"], "dataset"]
+        .astype(str)
+        .tolist()
+    )
     if invalid_datasets:
         raise ValueError(
             "data-quality checks failed for source dataset(s): "
@@ -49,7 +72,7 @@ def write_quality_report(
     report: pd.DataFrame,
     output_path: str | Path,
 ) -> Path:
-    """Persist a canonical quality report to CSV."""
+    """Persist the canonical quality report to CSV."""
     if not isinstance(report, pd.DataFrame):
         raise TypeError("report must be a pandas DataFrame")
 
