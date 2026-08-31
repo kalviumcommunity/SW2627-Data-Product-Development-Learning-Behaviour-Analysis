@@ -8,10 +8,7 @@ from pipeline.clean import (
     clean_quiz,
     clean_sessions,
 )
-from pipeline.config import (
-    BASE_DATA_PATH,
-    PROCESSED_PATH,
-)
+from pipeline.config import PROCESSED_PATH
 from pipeline.ingest import load_all_data
 from pipeline.join import build_student_course_table
 from pipeline.logger import logger
@@ -28,15 +25,10 @@ from pipeline.validate import validate_all
 
 
 def run_pipeline():
-    """Load, clean, validate, transform, join, gate, and persist."""
+    """Generate/load, clean, validate, transform, join, gate, and persist."""
     try:
-        logger.info(
-            "Loading source data from %s",
-            BASE_DATA_PATH,
-        )
-        data = load_all_data(
-            BASE_DATA_PATH
-        )
+        logger.info("Loading pipeline source data")
+        data = load_all_data()
 
         logger.info("Cleaning source data")
         data["completion"] = clean_completion(
@@ -94,8 +86,6 @@ def run_pipeline():
             / "student_course.csv"
         )
 
-        # Reuse the atomic writer used by the quality report by importing
-        # the helper locally to avoid expanding the public API.
         from pipeline.quality_gate import _atomic_csv
 
         _atomic_csv(

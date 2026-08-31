@@ -1,32 +1,51 @@
-# Reproducible synthetic data
+# Automatic synthetic source data
 
-This generator creates development/demo data for the four raw datasets used by
-the LearnLens pipeline.
+The pipeline now generates internally consistent synthetic raw data by
+default. The committed `data/raw/*.csv` fixtures are no longer required for
+normal development/demo execution.
 
-It is intentionally **not imported or executed by the production pipeline**.
-
-## Usage
-
-```bash
-python scripts/generate_synthetic_data.py   --seed 42   --students 100   --courses 5   --days 90   --output-dir data/generated
-```
-
-To replace an existing generated dataset:
+Run the normal pipeline:
 
 ```bash
-python scripts/generate_synthetic_data.py   --seed 42   --output-dir data/generated   --force
+python run_pipeline.py
 ```
 
-The output contains:
+By default:
 
 ```text
-completion.csv
-enrollment.csv
-sessions.csv
-quiz.csv
-manifest.json
+LEARNLENS_DATA_SOURCE=synthetic
 ```
 
-The generator is deterministic for a given seed and produces internally
-consistent student/course relationships. It does not write into `data/raw`
-unless a developer explicitly passes that directory as `--output-dir`.
+Every run gets a fresh dataset because the default seed is unset.
+
+For reproducible runs:
+
+```bash
+LEARNLENS_SYNTHETIC_SEED=42 python run_pipeline.py
+```
+
+Useful controls:
+
+```text
+LEARNLENS_SYNTHETIC_STUDENTS=500
+LEARNLENS_SYNTHETIC_COURSES=10
+LEARNLENS_SYNTHETIC_DAYS=180
+LEARNLENS_SYNTHETIC_START_DATE=2024-01-01
+```
+
+To keep an auditable generated snapshot:
+
+```bash
+LEARNLENS_SYNTHETIC_PERSIST=true python run_pipeline.py
+```
+
+Snapshots are written under `data/generated/`.
+
+The production pipeline can still explicitly ingest external CSVs:
+
+```bash
+LEARNLENS_DATA_SOURCE=csv python run_pipeline.py
+```
+
+This separation makes synthetic generation the default application path while
+keeping external-data ingestion available for a real deployment.
