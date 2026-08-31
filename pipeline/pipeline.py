@@ -10,6 +10,7 @@ from pipeline.clean import (
 )
 from pipeline.config import (
     BASE_DATA_PATH,
+    DATA_SOURCE_MODE,
     PROCESSED_PATH,
 )
 from pipeline.ingest import load_all_data
@@ -27,15 +28,23 @@ from pipeline.transform import (
 from pipeline.validate import validate_all
 
 
-def run_pipeline():
-    """Load, clean, validate, transform, join, gate, and persist."""
+def run_pipeline(data_path=None):
+    """Run the full pipeline.
+
+    With no explicit data_path, the configured source mode is used. When a
+    path is explicitly supplied, ingestion treats it as an external CSV
+    source, which keeps tests and real-data imports deterministic.
+    """
     try:
         logger.info(
-            "Loading source data from %s",
-            BASE_DATA_PATH,
+            "Loading pipeline source data (mode=%s)",
+            DATA_SOURCE_MODE,
         )
+
         data = load_all_data(
-            BASE_DATA_PATH
+            data_path
+            if data_path is not None
+            else None
         )
 
         logger.info("Cleaning source data")
@@ -94,8 +103,6 @@ def run_pipeline():
             / "student_course.csv"
         )
 
-        # Reuse the atomic writer used by the quality report by importing
-        # the helper locally to avoid expanding the public API.
         from pipeline.quality_gate import _atomic_csv
 
         _atomic_csv(

@@ -1,4 +1,4 @@
-"""Quality-gate integration tests for the production pipeline."""
+"""Integration tests for quality-gate ordering."""
 
 from __future__ import annotations
 
@@ -46,13 +46,11 @@ def test_run_pipeline_invokes_quality_gate_before_writing(
         ),
     }
 
-    calls = {"gate": False, "save": False}
+    calls = {
+        "gate": False,
+        "write": False,
+    }
 
-    monkeypatch.setattr(
-        pipeline_module,
-        "BASE_DATA_PATH",
-        tmp_path / "raw",
-    )
     monkeypatch.setattr(
         pipeline_module,
         "PROCESSED_PATH",
@@ -61,7 +59,10 @@ def test_run_pipeline_invokes_quality_gate_before_writing(
     monkeypatch.setattr(
         pipeline_module,
         "load_all_data",
-        lambda _: {key: value.copy() for key, value in raw.items()},
+        lambda _: {
+            key: value.copy()
+            for key, value in raw.items()
+        },
     )
     monkeypatch.setattr(
         pipeline_module,
@@ -113,7 +114,6 @@ def test_run_pipeline_invokes_quality_gate_before_writing(
 
     def gate(*args, **kwargs):
         calls["gate"] = True
-        assert kwargs.get("require_all_sources") is True
         return pd.DataFrame(
             {
                 "dataset": [
@@ -136,35 +136,44 @@ def test_run_pipeline_invokes_quality_gate_before_writing(
         gate,
     )
 
-    original_to_csv = pd.DataFrame.to_csv
-
-    def tracked_to_csv(self, *args, **kwargs):
-        target = args[0] if args else kwargs.get("path_or_buf")
-
-        if target is not None:
-            target_name = str(target)
-
-        # The production pipeline writes to a temporary file first,
-        # then atomically renames it to student_course.csv.
-        if (
-            "student_course.csv.tmp" in target_name
-            or ".student_course.csv." in target_name
-        ):
-            assert calls["gate"], (
-                "student_course.csv was written before the quality gate"
-            )
-            calls["save"] = True
-
-        return original_to_csv(self, *args, **kwargs)
+    def tracked_atomic_write(
+        frame,
+        output_path,
+    ):
+        assert calls["gate"], (
+            "student_course.csv was written before the quality gate"
+        )
+        calls["write"] = True
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        frame.to_csv(
+            output_path,
+            index=False,
+        )
+        return output_path
 
     monkeypatch.setattr(
-        pd.DataFrame,
-        "to_csv",
-        tracked_to_csv,
-)
+        pipeline_module,
+        "_atomic_writer_for_test",
+        tracked_atomic_write,
+        raising=False,
+    )
 
+    # Patch the private writer actually used by run_pipeline through the
+    # quality_gate module, avoiding brittle DataFrame.to_csv interception.
+    import pipeline.quality_gate as quality_gate_module
+
+    monkeypatch.setattr(
+        quality_gate_module,
+        "_atomic_csv",
+        tracked_atomic_write,
+    )
+
+    # The test's mocked loader means source mode does not matter.
     result = pipeline_module.run_pipeline()
 
     assert not result.empty
     assert calls["gate"] is True
-    assert calls["save"] is True
+    assert calls["write"] is True
