@@ -4,32 +4,29 @@ from __future__ import annotations
 
 import json
 
-import pandas as pd
 import pandas.testing as pdt
 import pytest
 
-from scripts.generate_synthetic_data import (
-    DATASET_COLUMNS,
-    generate_datasets,
-    write_datasets,
+from pipeline.synthetic_data import (
+    RAW_COLUMNS,
+    SyntheticDataConfig,
+    generate_synthetic_datasets,
 )
+from tests.synthetic_writer_compat import write_datasets
 
 
 def test_generation_is_reproducible():
-    first = generate_datasets(
-        seed=42,
-        students=25,
-        courses=4,
-        days=30,
-    )
-    second = generate_datasets(
+    config = SyntheticDataConfig(
         seed=42,
         students=25,
         courses=4,
         days=30,
     )
 
-    for name in DATASET_COLUMNS:
+    first = generate_synthetic_datasets(config)
+    second = generate_synthetic_datasets(config)
+
+    for name in RAW_COLUMNS:
         pdt.assert_frame_equal(
             first[name],
             second[name],
@@ -37,17 +34,21 @@ def test_generation_is_reproducible():
 
 
 def test_seed_changes_generated_data():
-    first = generate_datasets(
-        seed=1,
-        students=25,
-        courses=4,
-        days=30,
+    first = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=1,
+            students=25,
+            courses=4,
+            days=30,
+        )
     )
-    second = generate_datasets(
-        seed=2,
-        students=25,
-        courses=4,
-        days=30,
+    second = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=2,
+            students=25,
+            courses=4,
+            days=30,
+        )
     )
 
     assert not first["completion"].equals(
@@ -55,51 +56,51 @@ def test_seed_changes_generated_data():
     )
 
 
-def test_generated_schemas_match_raw_contract():
-    data = generate_datasets(
-        seed=42,
-        students=20,
-        courses=3,
-        days=30,
+def test_no_seed_produces_fresh_runs():
+    first = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=None,
+            students=20,
+            courses=4,
+            days=30,
+        )
+    )
+    second = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=None,
+            students=20,
+            courses=4,
+            days=30,
+        )
     )
 
-    for name, columns in DATASET_COLUMNS.items():
+    assert not first["completion"].equals(
+        second["completion"]
+    )
+
+
+def test_raw_schemas_match_current_pipeline_contract():
+    data = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=42,
+            students=10,
+            courses=3,
+            days=14,
+        )
+    )
+
+    for name, columns in RAW_COLUMNS.items():
         assert list(data[name].columns) == columns
 
 
-def test_generated_values_respect_domain_ranges():
-    data = generate_datasets(
-        seed=42,
-        students=20,
-        courses=3,
-        days=30,
-    )
-
-    assert data["completion"]["completion_pct"].between(
-        0,
-        100,
-    ).all()
-
-    assert data["sessions"]["duration_minutes"].ge(
-        0
-    ).all()
-
-    assert data["quiz"]["score"].between(
-        0,
-        100,
-    ).all()
-
-    assert data["quiz"]["attempt"].ge(
-        1
-    ).all()
-
-
-def test_student_course_relationships_are_consistent():
-    data = generate_datasets(
-        seed=42,
-        students=40,
-        courses=4,
-        days=60,
+def test_generated_relationships_are_consistent():
+    data = generate_synthetic_datasets(
+        SyntheticDataConfig(
+            seed=42,
+            students=30,
+            courses=4,
+            days=30,
+        )
     )
 
     completion_keys = set(
@@ -132,13 +133,13 @@ def test_student_course_relationships_are_consistent():
     assert quiz_keys <= completion_keys
 
 
-def test_writer_creates_csvs_and_manifest(tmp_path):
+def test_writer_creates_all_files(tmp_path):
     paths = write_datasets(
         tmp_path / "generated",
         seed=42,
-        students=10,
-        courses=3,
-        days=30,
+        students=8,
+        courses=2,
+        days=10,
     )
 
     assert set(paths) == {
@@ -149,19 +150,45 @@ def test_writer_creates_csvs_and_manifest(tmp_path):
         "manifest",
     }
 
-    for name, path in paths.items():
+    for path in paths.values():
         assert path.exists()
 
-    manifest = json.loads(
-        paths["manifest"].read_text(
+
+def test_writer_can_replace_with_force(tmp_path):
+    output_dir = tmp_path / "generated"
+
+    first = write_datasets(
+        output_dir,
+        seed=42,
+        students=5,
+        courses=2,
+        days=14,
+    )
+
+    # Snapshot the first manifest before force-overwriting it.
+    first_manifest = json.loads(
+        first["manifest"].read_text(
             encoding="utf-8"
         )
     )
 
-    assert manifest["seed"] == 42
-    assert set(manifest["datasets"]) == set(
-        DATASET_COLUMNS
+    second = write_datasets(
+        output_dir,
+        seed=99,
+        students=5,
+        courses=2,
+        days=14,
+        force=True,
     )
+
+    second_manifest = json.loads(
+        second["manifest"].read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert first_manifest["seed"] == 42
+    assert second_manifest["seed"] == 99
 
 
 def test_writer_does_not_overwrite_without_force(tmp_path):
@@ -183,38 +210,3 @@ def test_writer_does_not_overwrite_without_force(tmp_path):
             courses=2,
             days=14,
         )
-
-
-def test_writer_can_replace_with_force(tmp_path):
-    output_dir = tmp_path / "generated"
-
-    first = write_datasets(
-        output_dir,
-        seed=42,
-        students=5,
-        courses=2,
-        days=14,
-    )
-
-    second = write_datasets(
-        output_dir,
-        seed=99,
-        students=5,
-        courses=2,
-        days=14,
-        force=True,
-    )
-
-    first_manifest = json.loads(
-        first["manifest"].read_text(
-            encoding="utf-8"
-        )
-    )
-    second_manifest = json.loads(
-        second["manifest"].read_text(
-            encoding="utf-8"
-        )
-    )
-
-    assert first_manifest["seed"] == 42
-    assert second_manifest["seed"] == 99

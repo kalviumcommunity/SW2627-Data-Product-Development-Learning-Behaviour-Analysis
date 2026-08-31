@@ -28,28 +28,23 @@ from pipeline.transform import (
 from pipeline.validate import validate_all
 
 
-def run_pipeline(
-    data_path=None,
-):
-    """Run the complete pipeline using synthetic data or explicit CSV input.
+def run_pipeline(data_path=None):
+    """Run the full pipeline.
 
-    ``data_path`` is primarily useful for external CSV sources and tests.
-    In the default synthetic mode it is intentionally ignored because the
-    generated datasets are the pipeline's source.
+    With no explicit data_path, the configured source mode is used. When a
+    path is explicitly supplied, ingestion treats it as an external CSV
+    source, which keeps tests and real-data imports deterministic.
     """
-    source_path = (
-        BASE_DATA_PATH
-        if data_path is None
-        else data_path
-    )
-
     try:
         logger.info(
             "Loading pipeline source data (mode=%s)",
             DATA_SOURCE_MODE,
         )
+
         data = load_all_data(
-            source_path
+            data_path
+            if data_path is not None
+            else None
         )
 
         logger.info("Cleaning source data")

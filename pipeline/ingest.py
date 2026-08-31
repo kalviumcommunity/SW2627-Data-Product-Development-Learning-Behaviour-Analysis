@@ -1,4 +1,8 @@
-"""Data ingestion for synthetic or external LearnLens sources."""
+"""CSV and synthetic data ingestion.
+
+Explicit data paths are always treated as CSV sources. The configured default
+source mode is used only when no path is supplied.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,6 @@ from pipeline.synthetic_data import (
 
 
 def load_csv(path: str | Path) -> pd.DataFrame:
-    """Load a CSV file and provide a stable missing-file error."""
     path = Path(path)
     try:
         return pd.read_csv(path)
@@ -37,7 +40,6 @@ def load_csv(path: str | Path) -> pd.DataFrame:
 def _synthetic_seed() -> int | None:
     if SYNTHETIC_SEED_ENV is None:
         return None
-
     try:
         return int(SYNTHETIC_SEED_ENV)
     except ValueError as exc:
@@ -47,7 +49,6 @@ def _synthetic_seed() -> int | None:
 
 
 def load_synthetic_data() -> dict[str, pd.DataFrame]:
-    """Generate synthetic data for a pipeline run."""
     config = SyntheticDataConfig(
         seed=_synthetic_seed(),
         students=SYNTHETIC_STUDENTS,
@@ -70,17 +71,11 @@ def load_synthetic_data() -> dict[str, pd.DataFrame]:
 
 
 def load_all_data(
-    data_path: str | Path = BASE_DATA_PATH,
+    data_path: str | Path | None = None,
 ) -> dict[str, pd.DataFrame]:
-    """Load all source datasets according to the configured source mode.
-
-    The optional ``data_path`` is respected in CSV mode so callers can use
-    temporary fixtures and alternative external-data directories.
-    """
-    if DATA_SOURCE_MODE == "synthetic":
-        return load_synthetic_data()
-
-    if DATA_SOURCE_MODE == "csv":
+    # Explicit paths are deterministic CSV inputs and take precedence over
+    # the default configured source mode.
+    if data_path is not None:
         base_dir = Path(data_path)
         return {
             "completion": load_csv(base_dir / "completion.csv"),
@@ -89,6 +84,13 @@ def load_all_data(
             "enrollment": load_csv(base_dir / "enrollment.csv"),
         }
 
+    if DATA_SOURCE_MODE == "synthetic":
+        return load_synthetic_data()
+
+    if DATA_SOURCE_MODE == "csv":
+        return load_all_data(BASE_DATA_PATH)
+
     raise ValueError(
-        "LEARNLENS_DATA_SOURCE must be either 'synthetic' or 'csv'"
+        "LEARNLENS_DATA_SOURCE must be either "
+        "'synthetic' or 'csv'"
     )
