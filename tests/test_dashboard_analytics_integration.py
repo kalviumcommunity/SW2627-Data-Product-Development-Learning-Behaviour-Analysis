@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from app.services.analytics_service import AnalyticsService
 
 
-def _write_dataset(path: Path, filename: str, content: str) -> None:
+def _write_dataset(path, filename: str, content: str) -> None:
     (path / filename).write_text(content, encoding="utf-8")
 
 
@@ -111,4 +112,4 @@ S2,C1,2024-01-06,20
     kpis = service.kpis(dashboard)
 
     assert kpis["active_students"] == 2
-    assert kpis["average_quiz_score"] == 83.33333333333334
+    assert kpis["average_quiz_score"] == pytest.approx(83.33333333333334)
