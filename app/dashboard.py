@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 
+# Make the repository root importable when Streamlit runs app/dashboard.py.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 if str(PROJECT_ROOT) not in sys.path:
@@ -23,9 +24,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# 1. Render Sidebar (single persistent sidebar)
 selected_page = render_sidebar()
+
+# 2. Render Top Navbar
 _ = render_navbar()
 
+# 3. Route content based on selected sidebar item
 if selected_page == "Overview":
     render_overview()
 elif selected_page == "Student Behaviour":
