@@ -1,5 +1,7 @@
 """Course Performance dashboard view."""
 
+from __future__ import annotations
+
 import plotly.express as px
 import streamlit as st
 
@@ -52,16 +54,22 @@ def render_course_performance():
         show_segment=False,
     )
 
+    # UI labels use spaces; backend status values use underscores.
     status_value = (
         status
         if status == ALL_STATUSES
         else status.strip().lower().replace(" ", "_")
     )
+
     filtered = service.filter_data(
         dashboard,
         course=course,
         status=status_value,
     )
+
+    if filtered.raw["completion"].empty:
+        st.info("No course data matches the selected filters.")
+        return
 
     try:
         metrics = service.course_performance(filtered)
@@ -71,7 +79,7 @@ def render_course_performance():
         return
 
     if metrics.empty:
-        st.info("No course data matches the selected filters.")
+        st.info("No course performance data is available.")
         return
 
     st.divider()
@@ -186,6 +194,7 @@ def render_course_performance():
         }
     )
 
+    # Compatible with the existing Streamlit API used in this repository.
     st.dataframe(
         display,
         hide_index=True,
@@ -244,7 +253,6 @@ def render_course_performance():
 
     with col2:
         render_section_header("Top Performing Course")
-
         st.metric(
             "Completion Rate",
             f"{completion_leader['completion_rate']:.1f}%",
