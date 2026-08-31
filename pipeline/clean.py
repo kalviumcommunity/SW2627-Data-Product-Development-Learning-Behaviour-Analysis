@@ -6,117 +6,175 @@ import pandas as pd
 
 
 def _normalize_ids(df: pd.DataFrame) -> pd.DataFrame:
-    for col in ("student_id", "course_id"):
-        if col in df.columns:
-            df[col] = df[col].astype("string").str.strip()
-    return df
+    output = df.copy()
+
+    for column in ("student_id", "course_id"):
+        if column in output.columns:
+            output[column] = (
+                output[column]
+                .astype("string")
+                .str.strip()
+            )
+
+    return output
 
 
 def clean_completion(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.drop_duplicates().copy()
-    df = _normalize_ids(df)
+    """Normalize and type-clean completion records."""
+    output = _normalize_ids(df.drop_duplicates())
 
-    required = {"student_id", "course_id", "status", "completion_pct"}
-    missing = sorted(required - set(df.columns))
+    required = {
+        "student_id",
+        "course_id",
+        "status",
+        "completion_pct",
+    }
+    missing = sorted(required - set(output.columns))
+
     if missing:
         raise ValueError(
             f"completion dataset missing columns: {', '.join(missing)}"
         )
 
-    df["status"] = (
-        df["status"]
-        .fillna("")
+    output["status"] = (
+        output["status"]
         .astype("string")
-        .str.lower()
         .str.strip()
+        .str.lower()
     )
 
-    df["completion_pct"] = (
-        df["completion_pct"]
+    output["completion_pct"] = pd.to_numeric(
+        output["completion_pct"]
         .astype("string")
-        .str.replace("%", "", regex=False)
-    )
-    df["completion_pct"] = pd.to_numeric(
-        df["completion_pct"],
+        .str.replace("%", "", regex=False),
         errors="coerce",
     )
 
-    return df
+    return output
 
 
 def clean_sessions(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df = _normalize_ids(df)
+    """Normalize the raw session schema to canonical time fields.
+
+    The current raw dataset provides ``session_date`` and
+    ``duration_minutes``. ``session_date`` is normalized to ``start_time``.
+    When an exact time-of-day is unavailable, the timestamp is anchored at
+    midnight rather than inventing precision.
+
+    ``end_time`` is derived from the canonical start time and duration.
+    """
+    output = _normalize_ids(df)
 
     required = {
         "student_id",
         "course_id",
         "duration_minutes",
     }
-    missing = sorted(required - set(df.columns))
+
+    if "start_time" not in output.columns and "session_date" not in output.columns:
+        raise ValueError(
+            "sessions dataset missing start-time field; expected "
+            "'start_time' or 'session_date'"
+        )
+
+    missing = sorted(required - set(output.columns))
     if missing:
         raise ValueError(
             f"sessions dataset missing columns: {', '.join(missing)}"
         )
 
-    df["duration_minutes"] = pd.to_numeric(
-        df["duration_minutes"],
+    if "start_time" not in output.columns:
+        output["start_time"] = pd.to_datetime(
+            output["session_date"],
+            errors="coerce",
+        ).dt.normalize()
+    else:
+        output["start_time"] = pd.to_datetime(
+            output["start_time"],
+            errors="coerce",
+        )
+
+    output["duration_minutes"] = pd.to_numeric(
+        output["duration_minutes"],
         errors="coerce",
     )
 
-    return df
+    invalid_duration = (
+        output["duration_minutes"].notna()
+        & (output["duration_minutes"] < 0)
+    )
+
+    if invalid_duration.any():
+        raise ValueError(
+            "sessions.duration_minutes must be greater than or equal to 0"
+        )
+
+    output["end_time"] = (
+        output["start_time"]
+        + pd.to_timedelta(
+            output["duration_minutes"],
+            unit="m",
+        )
+    )
+
+    return output
 
 
 def clean_quiz(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize quiz schema to the canonical internal contract.
+    """Normalize quiz score/attempt fields and optional timestamps.
 
-    The current raw dataset uses ``attempt`` and ``score`` while older
-    pipeline code expects ``attempt_number`` and ``score_pct``. Accept both
-    forms and normalize to the canonical names so existing analytics and
-    dashboard features continue to work.
+    The current raw dataset uses ``attempt`` and ``score``. These are mapped
+    to canonical ``attempt_number`` and ``score_pct``. A quiz timestamp is
+    standardized when supplied, but is not fabricated when absent.
     """
-    df = df.copy()
-    df = _normalize_ids(df)
+    output = _normalize_ids(df)
 
     required_ids = {"student_id", "course_id"}
-    missing_ids = sorted(required_ids - set(df.columns))
+    missing_ids = sorted(required_ids - set(output.columns))
+
     if missing_ids:
         raise ValueError(
             f"quiz dataset missing columns: {', '.join(missing_ids)}"
         )
 
-    # Backward/forward-compatible schema normalization.
-    if "attempt_number" not in df.columns:
-        if "attempt" in df.columns:
-            df = df.rename(columns={"attempt": "attempt_number"})
+    if "attempt_number" not in output.columns:
+        if "attempt" in output.columns:
+            output = output.rename(
+                columns={"attempt": "attempt_number"}
+            )
         else:
             raise ValueError(
                 "quiz dataset missing attempt column; expected "
                 "'attempt_number' or 'attempt'"
             )
 
-    if "score_pct" not in df.columns:
-        if "score" in df.columns:
-            df = df.rename(columns={"score": "score_pct"})
+    if "score_pct" not in output.columns:
+        if "score" in output.columns:
+            output = output.rename(
+                columns={"score": "score_pct"}
+            )
         else:
             raise ValueError(
                 "quiz dataset missing score column; expected "
                 "'score_pct' or 'score'"
             )
 
-    df["attempt_number"] = pd.to_numeric(
-        df["attempt_number"],
+    output["attempt_number"] = pd.to_numeric(
+        output["attempt_number"],
         errors="coerce",
     )
 
-    df["score_pct"] = (
-        df["score_pct"]
+    output["score_pct"] = pd.to_numeric(
+        output["score_pct"]
         .astype("string")
-        .str.replace("%", "", regex=False)
-    )
-    df["score_pct"] = pd.to_numeric(
-        df["score_pct"],
+        .str.replace("%", "", regex=False),
         errors="coerce",
     )
 
-    return df
+    if "timestamp" in output.columns:
+        output["timestamp"] = pd.to_datetime(
+            output["timestamp"],
+            errors="coerce",
+        )
+
+    return output
