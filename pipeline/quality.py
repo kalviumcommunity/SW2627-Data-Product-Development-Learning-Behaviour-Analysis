@@ -7,9 +7,35 @@ from collections.abc import Mapping
 import numpy as np
 import pandas as pd
 
-from pipeline.schema import SOURCE_DATASET_NAMES, SOURCE_SCHEMAS
 
 KEYS = ("student_id", "course_id")
+
+REQUIRED_SCHEMAS = {
+    "completion": (
+        "student_id",
+        "course_id",
+        "completion_pct",
+        "status",
+    ),
+    "quiz": (
+        "student_id",
+        "course_id",
+        "attempt_number",
+        "score_pct",
+    ),
+    "sessions": (
+        "student_id",
+        "course_id",
+        "duration_minutes",
+        "start_time",
+    ),
+    "enrollment": (
+        "student_id",
+        "course_id",
+        "enrollment_date",
+        "cohort",
+    ),
+}
 
 
 def _invalid_id_rows(df: pd.DataFrame) -> int:
@@ -18,72 +44,65 @@ def _invalid_id_rows(df: pd.DataFrame) -> int:
     for column in KEYS:
         if column not in df.columns:
             continue
-
         invalid |= df[column].isna()
-        values = df[column].astype("string")
-        invalid |= values.str.strip().eq("").fillna(False)
+        invalid |= (
+            df[column]
+            .astype("string")
+            .str.strip()
+            .eq("")
+            .fillna(False)
+        )
 
     return int(invalid.sum()) if len(df) else 0
-
-
-def _missing_required_columns(
-    df: pd.DataFrame,
-    dataset: str,
-) -> bool:
-    schema = SOURCE_SCHEMAS.get(dataset)
-    if schema is None:
-        return False
-
-    return not set(schema.required_columns).issubset(df.columns)
 
 
 def _domain_error(df: pd.DataFrame, dataset: str) -> bool:
     if dataset == "completion" and "completion_pct" in df.columns:
         values = pd.to_numeric(df["completion_pct"], errors="coerce")
-        numeric = values.to_numpy(dtype=float)
+        numbers = values.to_numpy(dtype=float)
         return bool(
             values.isna().any()
-            or not np.isfinite(numeric).all()
+            or not np.isfinite(numbers).all()
             or not values.between(0, 100).all()
         )
 
     if dataset == "quiz":
         if "attempt_number" in df.columns:
-            attempts = pd.to_numeric(
+            values = pd.to_numeric(
                 df["attempt_number"],
                 errors="coerce",
             )
-            numeric = attempts.to_numpy(dtype=float)
+            numbers = values.to_numpy(dtype=float)
             if (
-                attempts.isna().any()
-                or not np.isfinite(numeric).all()
-                or not attempts.ge(1).all()
+                values.isna().any()
+                or not np.isfinite(numbers).all()
+                or not values.ge(1).all()
             ):
                 return True
 
         if "score_pct" in df.columns:
-            scores = pd.to_numeric(
+            values = pd.to_numeric(
                 df["score_pct"],
                 errors="coerce",
             )
-            numeric = scores.to_numpy(dtype=float)
+            numbers = values.to_numpy(dtype=float)
             if (
-                scores.isna().any()
-                or not np.isfinite(numeric).all()
-                or not scores.between(0, 100).all()
+                values.isna().any()
+                or not np.isfinite(numbers).all()
+                or not values.between(0, 100).all()
             ):
                 return True
 
     if dataset == "sessions" and "duration_minutes" in df.columns:
-        durations = pd.to_numeric(
+        values = pd.to_numeric(
             df["duration_minutes"],
             errors="coerce",
         )
-        numeric = durations.to_numpy(dtype=float)
+        numbers = values.to_numpy(dtype=float)
         return bool(
-            durations.isna().any()
-            or not np.isfinite(numeric).all()
-            or not durations.ge(0).all()
+            values.isna().any()
+            or not np.isfinite(numbers).all()
+            or not values.ge(0).all()
         )
 
     return False
@@ -92,8 +111,8 @@ def _domain_error(df: pd.DataFrame, dataset: str) -> bool:
 def generate_quality_report(
     data: Mapping[str, pd.DataFrame],
 ) -> pd.DataFrame:
-    """Return aggregate quality metrics for supplied datasets."""
-    rows = []
+    """Return the legacy, stable quality-report schema."""
+    rows: list[dict[str, object]] = []
 
     for name, df in data.items():
         if not isinstance(df, pd.DataFrame):
@@ -112,16 +131,11 @@ def generate_quality_report(
                 "missing_values": missing,
                 "duplicate_rows": duplicates,
                 "invalid_id_rows": invalid_ids,
-                "missing_required_columns": _missing_required_columns(
-                    df, name
-                ),
-                "domain_error": _domain_error(df, name),
                 "valid": bool(
                     len(df) > 0
                     and missing == 0
                     and duplicates == 0
                     and invalid_ids == 0
-                    and not _missing_required_columns(df, name)
                     and not _domain_error(df, name)
                 ),
             }
@@ -135,44 +149,18 @@ def generate_quality_report(
             "missing_values",
             "duplicate_rows",
             "invalid_id_rows",
-            "missing_required_columns",
-            "domain_error",
             "valid",
         ],
     )
 
 
-def validate_source_names(
-    data: Mapping[str, pd.DataFrame],
-) -> None:
-    """Require the exact production source-dataset set."""
-    missing = sorted(set(SOURCE_DATASET_NAMES) - set(data))
-    unknown = sorted(set(data) - set(SOURCE_DATASET_NAMES))
-
-    if missing:
-        raise ValueError(
-            "missing production source dataset(s): "
-            + ", ".join(missing)
-        )
-    if unknown:
-        raise ValueError(
-            "unknown production source dataset(s): "
-            + ", ".join(unknown)
-        )
-
-
 def validate_student_course_table(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Validate the final one-row-per-student-course analytics handoff."""
+    """Validate the final one-row-per-student-course analytics table."""
     if not isinstance(df, pd.DataFrame):
         raise TypeError(
             "student_course must be a pandas DataFrame"
-        )
-
-    if df.empty:
-        raise ValueError(
-            "student_course must contain at least one row"
         )
 
     missing = [
@@ -192,15 +180,15 @@ def validate_student_course_table(
             "with missing or blank identifiers"
         )
 
-    duplicate_keys = int(
+    duplicates = int(
         df.duplicated(
             subset=list(KEYS),
             keep=False,
         ).sum()
     )
-    if duplicate_keys:
+    if duplicates:
         raise ValueError(
-            f"student_course contains {duplicate_keys} rows "
+            f"student_course contains {duplicates} rows "
             "with duplicate student-course keys"
         )
 

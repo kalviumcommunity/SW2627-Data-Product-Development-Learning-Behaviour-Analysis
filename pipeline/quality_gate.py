@@ -1,4 +1,4 @@
-"""Production quality-gate enforcement and artifact persistence."""
+"""Production quality gate and atomic production artifact writers."""
 
 from __future__ import annotations
 
@@ -16,17 +16,8 @@ from pipeline.quality import (
 )
 from pipeline.schema import (
     PIPELINE_SCHEMA_VERSION,
+    SOURCE_DATASET_NAMES,
     schema_manifest,
-)
-
-
-PRODUCTION_SOURCES = frozenset(
-    {
-        "completion",
-        "enrollment",
-        "sessions",
-        "quiz",
-    }
 )
 
 
@@ -36,7 +27,7 @@ def validate_pipeline_output(
     *,
     require_all_sources: bool = False,
 ) -> pd.DataFrame:
-    """Validate supplied sources and the final analytics handoff."""
+    """Validate source datasets and the final student-course handoff."""
     if not isinstance(source_datasets, Mapping):
         raise TypeError(
             "source_datasets must be a mapping of dataset names "
@@ -50,43 +41,46 @@ def validate_pipeline_output(
             )
 
     if require_all_sources:
-        missing_sources = sorted(
-            PRODUCTION_SOURCES - set(source_datasets)
+        missing = sorted(
+            set(SOURCE_DATASET_NAMES) - set(source_datasets)
         )
-        if missing_sources:
+        if missing:
             raise ValueError(
                 "data-quality checks failed: missing source "
-                "dataset(s): " + ", ".join(missing_sources)
+                "dataset(s): " + ", ".join(missing)
             )
 
-        unknown_sources = sorted(
-            set(source_datasets) - PRODUCTION_SOURCES
+        unknown = sorted(
+            set(source_datasets) - set(SOURCE_DATASET_NAMES)
         )
-        if unknown_sources:
+        if unknown:
             raise ValueError(
                 "data-quality checks failed: unknown source "
-                "dataset(s): " + ", ".join(unknown_sources)
+                "dataset(s): " + ", ".join(unknown)
             )
 
-    report = generate_quality_report(source_datasets)
+    report = generate_quality_report(
+        source_datasets
+    )
 
-    invalid_datasets = (
+    invalid = (
         report.loc[~report["valid"], "dataset"]
         .astype(str)
         .tolist()
     )
-
-    if invalid_datasets:
+    if invalid:
         raise ValueError(
             "data-quality checks failed for source dataset(s): "
-            + ", ".join(invalid_datasets)
+            + ", ".join(invalid)
         )
 
-    validate_student_course_table(student_course_df)
+    validate_student_course_table(
+        student_course_df
+    )
     return report
 
 
-def _atomic_write_dataframe(
+def _atomic_csv(
     frame: pd.DataFrame,
     output_path: str | Path,
 ) -> Path:
@@ -113,10 +107,8 @@ def _atomic_write_dataframe(
             temporary,
             index=False,
         )
-
         with open(temporary, "rb") as handle:
             os.fsync(handle.fileno())
-
         os.replace(
             temporary,
             output,
@@ -131,7 +123,7 @@ def _atomic_write_dataframe(
     return output
 
 
-def _atomic_write_text(
+def _atomic_text(
     content: str,
     output_path: str | Path,
 ) -> Path:
@@ -157,11 +149,7 @@ def _atomic_write_text(
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-
-        os.replace(
-            temporary,
-            output,
-        )
+        os.replace(temporary, output)
     except Exception:
         try:
             os.unlink(temporary)
@@ -176,8 +164,8 @@ def write_quality_report(
     report: pd.DataFrame,
     output_path: str | Path,
 ) -> Path:
-    """Persist the quality report atomically."""
-    return _atomic_write_dataframe(
+    """Atomically persist the quality report."""
+    return _atomic_csv(
         report,
         output_path,
     )
@@ -190,19 +178,25 @@ def write_pipeline_manifest(
     quality_report_path: str | Path,
     student_course_path: str | Path,
 ) -> Path:
-    """Persist reproducibility metadata for the completed pipeline run."""
+    """Persist reproducibility metadata for the pipeline run."""
     if row_count < 0:
-        raise ValueError("row_count cannot be negative")
+        raise ValueError(
+            "row_count cannot be negative"
+        )
 
     payload = {
         "schema_version": PIPELINE_SCHEMA_VERSION,
         "row_count": int(row_count),
-        "quality_report": str(quality_report_path),
-        "student_course": str(student_course_path),
+        "quality_report": str(
+            quality_report_path
+        ),
+        "student_course": str(
+            student_course_path
+        ),
         "schema": schema_manifest(),
     }
 
-    return _atomic_write_text(
+    return _atomic_text(
         json.dumps(
             payload,
             indent=2,

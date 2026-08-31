@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import os
-
 from pipeline.clean import (
     clean_completion,
     clean_enrollment,
     clean_quiz,
     clean_sessions,
 )
-from pipeline.config import BASE_DATA_PATH, PROCESSED_PATH
+from pipeline.config import (
+    BASE_DATA_PATH,
+    PROCESSED_PATH,
+)
 from pipeline.ingest import load_all_data
 from pipeline.join import build_student_course_table
 from pipeline.logger import logger
@@ -19,40 +20,11 @@ from pipeline.quality_gate import (
     write_pipeline_manifest,
     write_quality_report,
 )
-from pipeline.transform import transform_quiz, transform_sessions
+from pipeline.transform import (
+    transform_quiz,
+    transform_sessions,
+)
 from pipeline.validate import validate_all
-
-
-def _atomic_write_dataframe(frame, output_path) -> None:
-    """Write a dataframe without leaving a partial production artifact."""
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    temporary = output_path.with_name(
-        f".{output_path.name}.tmp"
-    )
-
-    try:
-        frame.to_csv(
-            temporary,
-            index=False,
-        )
-
-        with open(temporary, "rb") as handle:
-            os.fsync(handle.fileno())
-
-        os.replace(
-            temporary,
-            output_path,
-        )
-    except Exception:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
-        raise
 
 
 def run_pipeline():
@@ -92,9 +64,11 @@ def run_pipeline():
         )
 
         logger.info("Building student-course table")
-        student_course = build_student_course_table(data)
+        student_course = build_student_course_table(
+            data
+        )
 
-        logger.info("Running production data-quality gate")
+        logger.info("Running production quality gate")
         quality_report = validate_pipeline_output(
             {
                 "completion": data["completion"],
@@ -107,7 +81,8 @@ def run_pipeline():
         )
 
         quality_report_path = (
-            PROCESSED_PATH / "quality_report.csv"
+            PROCESSED_PATH
+            / "quality_report.csv"
         )
         write_quality_report(
             quality_report,
@@ -115,16 +90,22 @@ def run_pipeline():
         )
 
         output_path = (
-            PROCESSED_PATH / "student_course.csv"
+            PROCESSED_PATH
+            / "student_course.csv"
         )
 
-        _atomic_write_dataframe(
+        # Reuse the atomic writer used by the quality report by importing
+        # the helper locally to avoid expanding the public API.
+        from pipeline.quality_gate import _atomic_csv
+
+        _atomic_csv(
             student_course,
             output_path,
         )
 
         write_pipeline_manifest(
-            PROCESSED_PATH / "pipeline_manifest.json",
+            PROCESSED_PATH
+            / "pipeline_manifest.json",
             row_count=len(student_course),
             quality_report_path=quality_report_path,
             student_course_path=output_path,

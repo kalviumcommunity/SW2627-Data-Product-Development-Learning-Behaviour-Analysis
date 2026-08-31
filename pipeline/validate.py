@@ -1,16 +1,11 @@
-"""Canonical source schema and dtype validation."""
+"""Validation for canonical pipeline source schemas and dtypes."""
 
 from __future__ import annotations
 
 import pandas as pd
 
-from pipeline.schema import SOURCE_SCHEMAS
+from pipeline.quality import REQUIRED_SCHEMAS
 
-
-REQUIRED_SCHEMAS = {
-    name: schema.required_columns
-    for name, schema in SOURCE_SCHEMAS.items()
-}
 
 NUMERIC_COLUMNS = {
     "completion": ("completion_pct",),
@@ -50,7 +45,6 @@ def validate_dtypes(
             raise TypeError(
                 f"{dataset_name}.{column} must be numeric"
             )
-
         if df[column].isna().any():
             raise ValueError(
                 f"{dataset_name}.{column} contains missing values"
@@ -59,7 +53,6 @@ def validate_dtypes(
     for column in DATETIME_COLUMNS.get(dataset_name, ()):
         if column not in df.columns:
             continue
-
         if not pd.api.types.is_datetime64_any_dtype(df[column]):
             raise TypeError(
                 f"{dataset_name}.{column} must be datetime-like"
@@ -69,21 +62,22 @@ def validate_dtypes(
 def validate_all(
     data_dict: dict[str, pd.DataFrame],
 ) -> None:
-    unknown = sorted(
-        set(data_dict) - set(REQUIRED_SCHEMAS)
-    )
-    if unknown:
-        raise ValueError(
-            f"Unknown datasets: {', '.join(unknown)}"
-        )
-
-    missing = sorted(
+    missing_datasets = sorted(
         set(REQUIRED_SCHEMAS) - set(data_dict)
     )
-    if missing:
+    if missing_datasets:
         raise ValueError(
             "Missing required datasets: "
-            + ", ".join(missing)
+            + ", ".join(missing_datasets)
+        )
+
+    unknown_datasets = sorted(
+        set(data_dict) - set(REQUIRED_SCHEMAS)
+    )
+    if unknown_datasets:
+        raise ValueError(
+            "Unknown datasets: "
+            + ", ".join(unknown_datasets)
         )
 
     for name, df in data_dict.items():
@@ -97,10 +91,7 @@ def validate_all(
             REQUIRED_SCHEMAS[name],
             name,
         )
-        validate_dtypes(
-            df,
-            name,
-        )
+        validate_dtypes(df, name)
 
         if df.duplicated().any():
             raise ValueError(
