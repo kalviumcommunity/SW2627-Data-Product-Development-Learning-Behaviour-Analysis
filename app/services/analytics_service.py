@@ -20,7 +20,11 @@ ALL_STATUSES = "Any Status"
 
 @dataclass(frozen=True)
 class DashboardData:
+    """Immutable dashboard data contract shared by all views."""
+
     raw: dict[str, pd.DataFrame]
+    features: pd.DataFrame | None = None
+    segments: pd.DataFrame | None = None
 
 
 class AnalyticsService:
@@ -80,9 +84,16 @@ class AnalyticsService:
         dashboard: DashboardData,
         *,
         course: str = ALL_COURSES,
+        segment: str = ALL_SEGMENTS,
         status: str = ALL_STATUSES,
+        selected_date: pd.Timestamp | str | None = None,
     ) -> DashboardData:
-        raw = {name: frame.copy() for name, frame in dashboard.raw.items()}
+        """Filter dashboard data using one canonical student-course population."""
+
+        raw = {
+            name: frame.copy()
+            for name, frame in dashboard.raw.items()
+        }
         keys = ["student_id", "course_id"]
         completion = raw["completion"]
 
@@ -90,30 +101,161 @@ class AnalyticsService:
 
         population = completion[keys].drop_duplicates()
 
+        # Course filter.
         if course != ALL_COURSES:
             population = population[
-                population["course_id"].astype(str) == str(course)
+                population["course_id"].astype(str).eq(str(course))
             ]
 
-        if status != ALL_STATUSES and "status" in completion.columns:
-            matching = completion[
-                completion["status"].astype(str).str.lower().eq(status.lower())
-            ]
+        # Status filter. If status is requested but the canonical source
+        # does not contain status, fail clearly instead of silently ignoring it.
+        if status != ALL_STATUSES:
+            if "status" not in completion.columns:
+                raise ValueError(
+                    "status filtering requires the canonical completion "
+                    "'status' column."
+                )
+
+            requested_status = str(status).strip().lower()
+            matching = completion.loc[
+                completion["status"]
+                .astype("string")
+                .str.strip()
+                .str.lower()
+                .eq(requested_status),
+                keys,
+            ].drop_duplicates()
+
             population = population.merge(
-                matching[keys].drop_duplicates(),
+                matching,
                 on=keys,
                 how="inner",
+                validate="one_to_one",
             )
 
+        # Segment filter uses the canonical segment table when available.
+        if segment != ALL_SEGMENTS:
+            if dashboard.segments is None:
+                raise ValueError(
+                    "segment filtering requires canonical segment data."
+                )
+
+            segments = dashboard.segments
+            required = set(keys) | {"segment"}
+            missing = required.difference(segments.columns)
+
+            if missing:
+                raise ValueError(
+                    "segment data is missing required columns: "
+                    f"{sorted(missing)}"
+                )
+
+            requested_segment = str(segment).strip().lower()
+            matching = segments.loc[
+                segments["segment"]
+                .astype("string")
+                .str.strip()
+                .str.lower()
+                .eq(requested_segment),
+                keys,
+            ].drop_duplicates()
+
+            population = population.merge(
+                matching,
+                on=keys,
+                how="inner",
+                validate="one_to_one",
+            )
+
+        # Date filtering is intentionally supported only when a canonical
+        # date field is present; never silently invent a date relationship.
+        if selected_date is not None:
+            date_frame = completion
+            date_column = next(
+                (
+                    column
+                    for column in (
+                        "enrollment_date",
+                        "date",
+                        "session_date",
+                        "timestamp",
+                        "start_time",
+                    )
+                    if column in date_frame.columns
+                ),
+                None,
+            )
+
+            if date_column is None:
+                enrollment = raw.get("enrollment")
+                if (
+                    enrollment is not None
+                    and "enrollment_date" in enrollment.columns
+                ):
+                    date_frame = enrollment
+                    date_column = "enrollment_date"
+
+            if date_column is None:
+                raise ValueError(
+                    "date filtering requires a supported canonical date column."
+                )
+
+            target_date = pd.Timestamp(selected_date).normalize()
+            dates = pd.to_datetime(
+                date_frame[date_column],
+                errors="coerce",
+            )
+
+            matching = date_frame.loc[
+                dates.dt.normalize().eq(target_date),
+                keys,
+            ].drop_duplicates()
+
+            population = population.merge(
+                matching,
+                on=keys,
+                how="inner",
+                validate="one_to_one",
+            )
+
+        # Apply the canonical population to every raw dataset.
         for name, frame in raw.items():
             if set(keys).issubset(frame.columns):
                 raw[name] = frame.merge(
                     population,
                     on=keys,
                     how="inner",
+                    validate="many_to_many",
                 )
 
-        return DashboardData(raw=raw)
+        # Preserve optional feature/segment tables in the returned contract.
+        filtered_features = dashboard.features
+        if filtered_features is not None:
+            filtered_features = filtered_features.copy()
+            if set(keys).issubset(filtered_features.columns):
+                filtered_features = filtered_features.merge(
+                    population,
+                    on=keys,
+                    how="inner",
+                    validate="many_to_many",
+                )
+
+        filtered_segments = dashboard.segments
+        if filtered_segments is not None:
+            filtered_segments = filtered_segments.copy()
+            if set(keys).issubset(filtered_segments.columns):
+                filtered_segments = filtered_segments.merge(
+                    population,
+                    on=keys,
+                    how="inner",
+                    validate="many_to_many",
+                )
+
+        return DashboardData(
+            raw=raw,
+            features=filtered_features,
+            segments=filtered_segments,
+        )
 
     def kpis(self, dashboard: DashboardData) -> dict[str, float | int]:
         return kpi_summary(
@@ -221,6 +363,7 @@ class AnalyticsService:
         sessions = dashboard.raw["sessions"].copy()
 
         self._validate_completion_grain(completion)
+        self._validate_quiz_schema(quiz)
 
         if completion.empty:
             return pd.DataFrame(
@@ -240,12 +383,6 @@ class AnalyticsService:
             quiz_data["score_pct"] = pd.to_numeric(
                 quiz_data["score_pct"], errors="coerce"
             )
-            if "attempt_number" not in quiz_data.columns:
-                raise ValueError(
-                    "quiz data is missing required column: "
-                    "'attempt_number'. Expected the canonical quiz schema."
-                )
-
             quiz_data["attempt_number"] = pd.to_numeric(
                 quiz_data["attempt_number"],
                 errors="coerce",
@@ -457,47 +594,43 @@ class AnalyticsService:
     def report_export_data(
         self,
         dashboard: DashboardData,
+        *,
+        course: str = ALL_COURSES,
+        status: str = ALL_STATUSES,
+        segment: str = ALL_SEGMENTS,
     ) -> pd.DataFrame:
-        """Return a stable learner-course report export."""
+        """Return a stable learner-level report export."""
 
-        columns = [
+        filtered = self.filter_data(
+            dashboard,
+            course=course,
+            status=status,
+            segment=segment,
+        )
+
+        export_columns = [
             "student_id",
             "course_id",
             "status",
             "completion_pct",
         ]
 
-        completion = dashboard.raw["completion"].copy()
+        completion = filtered.raw.get("completion")
+        if completion is None:
+            return pd.DataFrame(columns=export_columns)
 
-        if completion.empty:
-            return pd.DataFrame(columns=columns)
+        result = completion.copy()
 
-        # Reindex guarantees the same CSV schema even if an upstream
-        # optional field is unavailable.
-        export_data = completion.reindex(
-            columns=columns
-        ).copy()
+        # Missing source columns remain part of the public export contract.
+        for column in export_columns:
+            if column not in result.columns:
+                result[column] = pd.NA
 
-        export_data["student_id"] = (
-            export_data["student_id"].astype("string")
+        return (
+            result.loc[:, export_columns]
+            .drop_duplicates(subset=["student_id", "course_id"])
+            .reset_index(drop=True)
         )
-        export_data["course_id"] = (
-            export_data["course_id"].astype("string")
-        )
-        export_data["status"] = (
-            export_data["status"]
-            .astype("string")
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "_", regex=False)
-        )
-        export_data["completion_pct"] = pd.to_numeric(
-            export_data["completion_pct"],
-            errors="coerce",
-        ).round(2)
-
-        return export_data.reset_index(drop=True)
-
 
     def course_performance(
         self,
