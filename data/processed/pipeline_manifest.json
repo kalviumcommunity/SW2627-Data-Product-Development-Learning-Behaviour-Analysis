@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "row_count": 216,
+  "quality_report": "data/processed/quality_report.csv",
+  "student_course": "data/processed/student_course.csv",
+  "schema": {
+    "version": "1.0",
+    "datasets": {
+      "completion": {
+        "required_columns": [
+          "student_id",
+          "course_id",
+          "completion_pct",
+          "status"
+        ],
+        "grain": "one row per student-course"
+      },
+      "enrollment": {
+        "required_columns": [
+          "student_id",
+          "course_id",
+          "enrollment_date",
+          "cohort"
+        ],
+        "grain": "one row per student-course"
+      },
+      "sessions": {
+        "required_columns": [
+          "student_id",
+          "course_id",
+          "duration_minutes",
+          "start_time"
+        ],
+        "grain": "one row per session"
+      },
+      "quiz": {
+        "required_columns": [
+          "student_id",
+          "course_id",
+          "attempt_number",
+          "score_pct"
+        ],
+        "grain": "one row per quiz attempt"
+      }
+    }
+  }
+}

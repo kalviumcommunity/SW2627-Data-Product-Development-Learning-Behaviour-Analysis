@@ -19,7 +19,7 @@ from services.analytics_service import (
 
 
 @st.cache_data(show_spinner=False)
-def _load_dashboard_data(data_path: str = "data/raw"):
+def _load_dashboard_data(data_path: str | None = None):
     """Load and cache cleaned dashboard data."""
     return AnalyticsService(data_path).load()
 

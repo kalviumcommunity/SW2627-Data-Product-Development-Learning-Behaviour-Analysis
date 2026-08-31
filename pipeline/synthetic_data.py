@@ -82,13 +82,11 @@ def _assignments(
                 min(3, courses) + 1,
             )
         )
-
         selected = rng.choice(
             course_ids,
             size=course_count,
             replace=False,
         )
-
         assignments.extend(
             (student_id, str(course_id))
             for course_id in selected
@@ -165,27 +163,32 @@ def generate_synthetic_datasets(
         right=False,
     ).astype(str)
 
-    # Sessions contain real source timestamps and are event-level rows.
+    # Sessions contain event-level rows. The validator rejects exact duplicate
+    # rows, so session dates are sampled without replacement per student-course
+    # pair. This guarantees unique source rows without weakening validation.
     session_rows: list[dict[str, object]] = []
 
     for student_id, course_id in assignments:
+        max_sessions = min(4, config.days)
         count = int(
-            rng.integers(1, 5)
+            rng.integers(
+                1,
+                max_sessions + 1,
+            )
         )
 
-        for _ in range(count):
-            day_index = int(
-                rng.integers(
-                    0,
-                    config.days,
-                )
-            )
+        day_indices = rng.choice(
+            config.days,
+            size=count,
+            replace=False,
+        )
 
+        for day_index in day_indices:
             session_rows.append(
                 {
                     "student_id": student_id,
                     "course_id": course_id,
-                    "session_date": calendar[day_index],
+                    "session_date": calendar[int(day_index)],
                     "duration_minutes": int(
                         rng.integers(
                             15,
@@ -216,8 +219,7 @@ def generate_synthetic_datasets(
 
         for attempt in range(1, attempt_count + 1):
             score = np.clip(
-                base_score
-                + rng.normal(0, 10),
+                base_score + rng.normal(0, 10),
                 0,
                 100,
             )
@@ -282,6 +284,11 @@ def validate_generated_datasets(
                 f"synthetic {name} contains missing identifiers"
             )
 
+        if frame.duplicated().any():
+            raise ValueError(
+                f"synthetic {name} contains duplicate rows"
+            )
+
     completion = datasets["completion"]
     if not completion["completion_pct"].between(
         0,
@@ -315,7 +322,9 @@ def validate_generated_datasets(
             "synthetic quiz scores are outside 0-100"
         )
 
-    if not quiz["attempt"].ge(1).all():
+    if not quiz["attempt"].ge(
+        1
+    ).all():
         raise ValueError(
             "synthetic quiz attempts must be >= 1"
         )
@@ -328,7 +337,7 @@ def write_synthetic_snapshot(
     seed: int | None,
     config: SyntheticDataConfig,
 ) -> dict[str, Path]:
-    """Persist an optional auditable snapshot of a generated run."""
+    """Persist an auditable snapshot of a generated run."""
     output = Path(output_dir)
     output.mkdir(
         parents=True,

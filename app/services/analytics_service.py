@@ -30,11 +30,17 @@ class DashboardData:
 class AnalyticsService:
     """Application boundary between Streamlit and existing analytics."""
 
-    def __init__(self, data_path: str | Path = "data/raw") -> None:
-        self.data_path = Path(data_path)
+    def __init__(self, data_path: str | Path | None = None) -> None:
+        self.data_path = (
+            Path(data_path) if data_path is not None else None
+        )
 
     def load(self) -> DashboardData:
-        data = load_all_data(self.data_path)
+        data = (
+            load_all_data()
+            if self.data_path is None
+            else load_all_data(self.data_path)
+        )
         data["completion"] = clean_completion(data["completion"])
         data["quiz"] = clean_quiz(data["quiz"])
         data["sessions"] = clean_sessions(data["sessions"])
