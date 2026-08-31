@@ -20,9 +20,6 @@ PROCESSED_PATH = Path(
     )
 )
 
-# Synthetic generation is the default so the application has no dependency
-# on committed/hardcoded raw CSV fixtures. Set to "csv" to explicitly use
-# externally supplied raw data.
 DATA_SOURCE_MODE = os.getenv(
     "LEARNLENS_DATA_SOURCE",
     "synthetic",

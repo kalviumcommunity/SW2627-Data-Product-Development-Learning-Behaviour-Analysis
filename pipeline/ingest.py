@@ -1,4 +1,4 @@
-"""Data ingestion utilities for LearnLens."""
+"""Data ingestion for synthetic or external LearnLens sources."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pipeline.config import (
     SYNTHETIC_PERSIST,
     SYNTHETIC_SEED_ENV,
     SYNTHETIC_START_DATE,
+    SYNTHETIC_STUDENTS,
 )
 from pipeline.synthetic_data import (
     SyntheticDataConfig,
@@ -23,9 +24,8 @@ from pipeline.synthetic_data import (
 
 
 def load_csv(path: str | Path) -> pd.DataFrame:
-    """Load one CSV file with a useful missing-file error."""
+    """Load a CSV file and provide a stable missing-file error."""
     path = Path(path)
-
     try:
         return pd.read_csv(path)
     except FileNotFoundError as exc:
@@ -47,7 +47,7 @@ def _synthetic_seed() -> int | None:
 
 
 def load_synthetic_data() -> dict[str, pd.DataFrame]:
-    """Generate a fresh synthetic dataset for the current pipeline run."""
+    """Generate synthetic data for a pipeline run."""
     config = SyntheticDataConfig(
         seed=_synthetic_seed(),
         students=SYNTHETIC_STUDENTS,
@@ -72,33 +72,23 @@ def load_synthetic_data() -> dict[str, pd.DataFrame]:
 def load_all_data(
     data_path: str | Path = BASE_DATA_PATH,
 ) -> dict[str, pd.DataFrame]:
-    """Load pipeline inputs according to the configured source mode.
+    """Load all source datasets according to the configured source mode.
 
-    Synthetic generation is the default. CSV ingestion remains available via
-    ``LEARNLENS_DATA_SOURCE=csv`` for externally supplied datasets.
+    The optional ``data_path`` is respected in CSV mode so callers can use
+    temporary fixtures and alternative external-data directories.
     """
     if DATA_SOURCE_MODE == "synthetic":
         return load_synthetic_data()
 
     if DATA_SOURCE_MODE == "csv":
         base_dir = Path(data_path)
-
         return {
-            "completion": load_csv(
-                base_dir / "completion.csv"
-            ),
-            "quiz": load_csv(
-                base_dir / "quiz.csv"
-            ),
-            "sessions": load_csv(
-                base_dir / "sessions.csv"
-            ),
-            "enrollment": load_csv(
-                base_dir / "enrollment.csv"
-            ),
+            "completion": load_csv(base_dir / "completion.csv"),
+            "quiz": load_csv(base_dir / "quiz.csv"),
+            "sessions": load_csv(base_dir / "sessions.csv"),
+            "enrollment": load_csv(base_dir / "enrollment.csv"),
         }
 
     raise ValueError(
-        "LEARNLENS_DATA_SOURCE must be either "
-        "'synthetic' or 'csv'"
+        "LEARNLENS_DATA_SOURCE must be either 'synthetic' or 'csv'"
     )

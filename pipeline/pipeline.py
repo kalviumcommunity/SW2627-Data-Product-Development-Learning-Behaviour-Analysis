@@ -8,7 +8,11 @@ from pipeline.clean import (
     clean_quiz,
     clean_sessions,
 )
-from pipeline.config import PROCESSED_PATH
+from pipeline.config import (
+    BASE_DATA_PATH,
+    DATA_SOURCE_MODE,
+    PROCESSED_PATH,
+)
 from pipeline.ingest import load_all_data
 from pipeline.join import build_student_course_table
 from pipeline.logger import logger
@@ -24,11 +28,29 @@ from pipeline.transform import (
 from pipeline.validate import validate_all
 
 
-def run_pipeline():
-    """Generate/load, clean, validate, transform, join, gate, and persist."""
+def run_pipeline(
+    data_path=None,
+):
+    """Run the complete pipeline using synthetic data or explicit CSV input.
+
+    ``data_path`` is primarily useful for external CSV sources and tests.
+    In the default synthetic mode it is intentionally ignored because the
+    generated datasets are the pipeline's source.
+    """
+    source_path = (
+        BASE_DATA_PATH
+        if data_path is None
+        else data_path
+    )
+
     try:
-        logger.info("Loading pipeline source data")
-        data = load_all_data()
+        logger.info(
+            "Loading pipeline source data (mode=%s)",
+            DATA_SOURCE_MODE,
+        )
+        data = load_all_data(
+            source_path
+        )
 
         logger.info("Cleaning source data")
         data["completion"] = clean_completion(
