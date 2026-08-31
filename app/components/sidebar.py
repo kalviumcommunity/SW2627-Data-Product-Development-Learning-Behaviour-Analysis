@@ -1,22 +1,52 @@
 import streamlit as st
 
-def render_sidebar():
-    """
-    Renders the custom LearnLens AI sidebar with seamless Light & Dark mode support.
-    Returns the selected navigation page name.
-    """
-    # Initialize session state for navigation
-    if "current_page" not in st.session_state:
-        st.session_state["current_page"] = "Overview"
 
-    # Inject theme-adaptive CSS for Sidebar
+NAV_PAGES = (
+    "Overview",
+    "Student Behaviour",
+    "Course Performance",
+    "Reports & Insights",
+    "Settings",
+)
+
+
+def _get_persisted_page() -> str:
+    """Read and validate the page stored in the browser URL."""
+    page = st.query_params.get("page", "Overview")
+    return page if page in NAV_PAGES else "Overview"
+
+
+def _set_page(page: str) -> None:
+    """Persist the selected page and synchronize the current session."""
+    if page not in NAV_PAGES:
+        page = "Overview"
+
+    st.session_state["current_page"] = page
+    st.query_params["page"] = page
+
+
+def render_sidebar():
+    """Render the LearnLens sidebar and persist navigation across refreshes."""
+
+    # Initialize from the URL first. A browser refresh creates a new
+    # Streamlit session, so session_state alone cannot preserve navigation.
+    if "current_page" not in st.session_state:
+        st.session_state["current_page"] = _get_persisted_page()
+
+    # If an existing session has a valid page, keep the URL synchronized.
+    current_page = st.session_state["current_page"]
+    if current_page not in NAV_PAGES:
+        current_page = "Overview"
+        st.session_state["current_page"] = current_page
+
+    if st.query_params.get("page") != current_page:
+        st.query_params["page"] = current_page
+
     st.markdown(
         """
         <style>
-        /* Import Google Font */
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
-        /* Sidebar container styling */
         section[data-testid="stSidebar"] {
             border-right: 1px solid rgba(128, 128, 128, 0.15) !important;
             padding-top: 1.5rem !important;
@@ -31,10 +61,10 @@ def render_sidebar():
             padding-right: 1.25rem !important;
         }
 
-        /* Brand styling in sidebar */
         .sidebar-brand {
             padding: 0 0.5rem 1.5rem 0.5rem !important;
         }
+
         .sidebar-brand-title {
             font-size: 0.90rem !important;
             font-weight: 800 !important;
@@ -47,6 +77,7 @@ def render_sidebar():
             margin: 0 !important;
             display: inline-block !important;
         }
+
         .sidebar-brand-sub {
             font-size: 0.68rem !important;
             font-weight: 600 !important;
@@ -56,7 +87,6 @@ def render_sidebar():
             letter-spacing: 0.04em !important;
         }
 
-        /* Navigation Buttons */
         div[data-testid="stSidebar"] .stButton > button {
             width: 100% !important;
             border-radius: 10px !important;
@@ -82,7 +112,6 @@ def render_sidebar():
             border-color: rgba(128, 128, 128, 0.2) !important;
         }
 
-        /* Active Nav Button */
         div[data-testid="stSidebar"] .stButton > button[kind="primary"] {
             background-color: #4f46e5 !important;
             color: #ffffff !important;
@@ -90,7 +119,6 @@ def render_sidebar():
             border: 1px solid #4f46e5 !important;
         }
 
-        /* Bottom section buttons */
         .sidebar-footer {
             margin-top: 2rem !important;
             padding-top: 1rem !important;
@@ -108,6 +136,7 @@ def render_sidebar():
             justify-content: center !important;
             gap: 0.5rem !important;
         }
+
         .upload-btn-container button:hover {
             background-color: rgba(79, 70, 229, 0.1) !important;
         }
@@ -117,7 +146,6 @@ def render_sidebar():
     )
 
     with st.sidebar:
-        # Brand / Logo Header with Golden Yellow color
         st.markdown(
             """
             <div class="sidebar-brand">
@@ -128,7 +156,6 @@ def render_sidebar():
             unsafe_allow_html=True,
         )
 
-        # Navigation Options List
         nav_items = [
             {"name": "Overview", "icon": "⊞"},
             {"name": "Student Behaviour", "icon": "💡"},
@@ -139,44 +166,65 @@ def render_sidebar():
         for item in nav_items:
             is_active = st.session_state["current_page"] == item["name"]
             button_label = f"{item['icon']}  {item['name']}"
-            btn_type = "primary" if is_active else "secondary"
 
             if st.button(
                 button_label,
                 key=f"nav_{item['name']}",
-                type=btn_type,
+                type="primary" if is_active else "secondary",
                 use_container_width=True,
             ):
-                st.session_state["current_page"] = item["name"]
+                _set_page(item["name"])
                 st.rerun()
 
-        # Vertical Spacer
-        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div style='height: 100px;'></div>",
+            unsafe_allow_html=True,
+        )
 
-        # Footer Actions
-        st.markdown("<div class='sidebar-footer'></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='sidebar-footer'></div>",
+            unsafe_allow_html=True,
+        )
 
-        # Settings link/button
-        if st.button("⚙️  Settings", key="nav_settings", type="secondary", use_container_width=True):
-            st.session_state["current_page"] = "Settings"
+        if st.button(
+            "⚙️  Settings",
+            key="nav_settings",
+            type="secondary",
+            use_container_width=True,
+        ):
+            _set_page("Settings")
             st.rerun()
 
-        # Upload Dataset Button
-        st.markdown("<div class='upload-btn-container'>", unsafe_allow_html=True)
-        if st.button("📥  Upload Dataset", key="btn_upload_dataset", use_container_width=True):
-            st.session_state["show_uploader"] = not st.session_state.get("show_uploader", False)
+        st.markdown(
+            "<div class='upload-btn-container'>",
+            unsafe_allow_html=True,
+        )
+
+        if st.button(
+            "📥  Upload Dataset",
+            key="btn_upload_dataset",
+            use_container_width=True,
+        ):
+            st.session_state["show_uploader"] = not st.session_state.get(
+                "show_uploader",
+                False,
+            )
             st.rerun()
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # Optional file uploader drawer if clicked
         if st.session_state.get("show_uploader", False):
-            with st.expander("📁 Upload New Dataset", expanded=True):
+            with st.expander(
+                "📁 Upload New Dataset",
+                expanded=True,
+            ):
                 uploaded_file = st.file_uploader(
                     "Choose a CSV file",
                     type=["csv"],
                     key="sidebar_file_uploader",
                     label_visibility="collapsed",
                 )
+
                 if uploaded_file is not None:
                     st.success(f"Loaded: {uploaded_file.name}")
 
