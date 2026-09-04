@@ -6,6 +6,7 @@ NAV_PAGES = (
     "Student Behaviour",
     "Course Performance",
     "Reports & Insights",
+    "Behaviour Insights",
     "Settings",
 )
 
@@ -27,13 +28,9 @@ def _set_page(page: str) -> None:
 
 def render_sidebar():
     """Render the LearnLens sidebar and persist navigation across refreshes."""
-
-    # Initialize from the URL first. A browser refresh creates a new
-    # Streamlit session, so session_state alone cannot preserve navigation.
     if "current_page" not in st.session_state:
         st.session_state["current_page"] = _get_persisted_page()
 
-    # If an existing session has a valid page, keep the URL synchronized.
     current_page = st.session_state["current_page"]
     if current_page not in NAV_PAGES:
         current_page = "Overview"
@@ -161,6 +158,7 @@ def render_sidebar():
             {"name": "Student Behaviour", "icon": "💡"},
             {"name": "Course Performance", "icon": "📈"},
             {"name": "Reports & Insights", "icon": "📊"},
+            {"name": "Behaviour Insights", "icon": "🧠"},
         ]
 
         for item in nav_items:
@@ -176,15 +174,8 @@ def render_sidebar():
                 _set_page(item["name"])
                 st.rerun()
 
-        st.markdown(
-            "<div style='height: 100px;'></div>",
-            unsafe_allow_html=True,
-        )
-
-        st.markdown(
-            "<div class='sidebar-footer'></div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='sidebar-footer'></div>", unsafe_allow_html=True)
 
         if st.button(
             "⚙️  Settings",
@@ -195,10 +186,7 @@ def render_sidebar():
             _set_page("Settings")
             st.rerun()
 
-        st.markdown(
-            "<div class='upload-btn-container'>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div class='upload-btn-container'>", unsafe_allow_html=True)
 
         if st.button(
             "📥  Upload Dataset",
@@ -206,18 +194,14 @@ def render_sidebar():
             use_container_width=True,
         ):
             st.session_state["show_uploader"] = not st.session_state.get(
-                "show_uploader",
-                False,
+                "show_uploader", False
             )
             st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 
         if st.session_state.get("show_uploader", False):
-            with st.expander(
-                "📁 Upload New Dataset",
-                expanded=True,
-            ):
+            with st.expander("📁 Upload New Dataset", expanded=True):
                 uploaded_file = st.file_uploader(
                     "Choose a CSV file",
                     type=["csv"],
