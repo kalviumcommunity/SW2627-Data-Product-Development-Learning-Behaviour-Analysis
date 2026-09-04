@@ -14,6 +14,7 @@ from views.overview import render_overview
 from views.student_behaviour import render_student_behaviour
 from views.course_performance import render_course_performance
 from views.reports_insights import render_reports_insights
+from views.behaviour_insights import render_behaviour_insights
 
 
 st.set_page_config(
@@ -34,6 +35,8 @@ elif selected_page == "Course Performance":
     render_course_performance()
 elif selected_page == "Reports & Insights":
     render_reports_insights()
+elif selected_page == "Behaviour Insights":
+    render_behaviour_insights()
 elif selected_page == "Settings":
     st.title("Settings")
     st.write("System configuration and user preferences.")

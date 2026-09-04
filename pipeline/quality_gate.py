@@ -84,49 +84,20 @@ def _atomic_csv(
     frame: pd.DataFrame,
     output_path: str | Path,
 ) -> Path:
+    """Atomically write a dataframe to CSV.
+
+    The file is first written to a temporary file in the destination
+    directory. The temporary file is flushed and synced before being
+    atomically renamed into place.
+
+    Using the original mkstemp file descriptor avoids Windows-specific
+    descriptor/handle issues caused by reopening the temporary path.
+    """
     if not isinstance(frame, pd.DataFrame):
         raise TypeError(
             "frame must be a pandas DataFrame"
         )
 
-    output = Path(output_path)
-    output.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    fd, temporary = tempfile.mkstemp(
-        prefix=f".{output.name}.",
-        suffix=".tmp",
-        dir=output.parent,
-    )
-    os.close(fd)
-
-    try:
-        frame.to_csv(
-            temporary,
-            index=False,
-        )
-        with open(temporary, "rb") as handle:
-            os.fsync(handle.fileno())
-        os.replace(
-            temporary,
-            output,
-        )
-    except Exception:
-        try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
-        raise
-
-    return output
-
-
-def _atomic_text(
-    content: str,
-    output_path: str | Path,
-) -> Path:
     output = Path(output_path)
     output.parent.mkdir(
         parents=True,
@@ -145,14 +116,75 @@ def _atomic_text(
             fd,
             "w",
             encoding="utf-8",
+            newline="",
+        ) as handle:
+            frame.to_csv(
+                handle,
+                index=False,
+            )
+            handle.flush()
+            os.fsync(
+                handle.fileno()
+            )
+
+        os.replace(
+            temporary,
+            output,
+        )
+
+    except Exception:
+        try:
+            os.unlink(
+                temporary
+            )
+        except FileNotFoundError:
+            pass
+        raise
+
+    return output
+
+
+def _atomic_text(
+    content: str,
+    output_path: str | Path,
+) -> Path:
+    """Atomically write UTF-8 text to a file."""
+    output = Path(output_path)
+    output.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    fd, temporary = tempfile.mkstemp(
+        prefix=f".{output.name}.",
+        suffix=".tmp",
+        dir=output.parent,
+        text=True,
+    )
+
+    try:
+        with os.fdopen(
+            fd,
+            "w",
+            encoding="utf-8",
+            newline="",
         ) as handle:
             handle.write(content)
             handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, output)
+            os.fsync(
+                handle.fileno()
+            )
+
+        os.replace(
+            temporary,
+            output,
+        )
+
     except Exception:
         try:
-            os.unlink(temporary)
+            os.unlink(
+                temporary
+            )
         except FileNotFoundError:
             pass
         raise

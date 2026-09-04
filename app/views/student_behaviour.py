@@ -11,7 +11,7 @@ from services.analytics_service import ALL_STATUSES, AnalyticsService
 
 
 @st.cache_data(show_spinner=False)
-def _load_dashboard_data(data_path: str = "data/raw"):
+def _load_dashboard_data(data_path: str | None = None):
     return AnalyticsService(data_path).load()
 
 
